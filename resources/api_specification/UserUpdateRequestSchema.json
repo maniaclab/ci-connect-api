@@ -1,0 +1,39 @@
+{
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "id": "http://jsonschema.net",
+  "required": true,
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "enum": [ "v1alpha1" ]
+    },
+    "metadata": {
+      "type": "object",
+      "required": true,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "phone": {
+          "type": "string"
+        },
+        "institution": {
+          "type": "string"
+        },
+        "public_key": {
+          "type": "string",
+          "required": true
+        },
+        "superuser": {
+          "type": "boolean",
+          "required": true
+        }
+      }
+    }
+  },
+  "required": ["apiVersion"]
+}

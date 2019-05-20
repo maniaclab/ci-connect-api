@@ -6,14 +6,111 @@ version: v1alpha1
 
 /users:
   post:
+    description: Create a user
+    queryParameters:
+      token:
+        displayName: Access Token
+        type: string
+        description: User's authentication token
+        required: true
+    body:
+      # only a superuser is authorized to create other users
+      application/json:
+        type: !include UserCreateRequestSchema.json
+    responses:
+      200:
+        description: Success
+        body:
+          application/json:
+            type: !include UserInfoResultSchema.json
+      400: 
+        description: Insufficient information
+        body:
+          application/json:
+            type: !include ErrorResultSchema.json
+      403:
+        description: Authentication/authorization error
+        body:
+          application/json:
+            type: !include ErrorResultSchema.json
   /{user_ID}:
     get:
+      # only the user or a superuser should be allowed to fetch a user's detailed info
+      description: Get user's detailed information
+      queryParameters:
+        token:
+          displayName: Access Token
+          type: string
+          description: User's authentication token
+          required: true
+      responses:
+        200:
+          description: Normal success
+          body:
+            application/json: 
+              type: !include UserInfoResult.json
+        403:
+          description: Authentication/authorization error
+          body:
+            application/json:
+              type: !include ErrorResultSchema.json
+        404:
+          description: User not found error
+          body:
+            application/json:
+              type: !include ErrorResultSchema.json
     put:
+      description: Update a user's information
+      queryParameters:
+        token:
+          displayName: Access Token
+          type: string
+          description: User's authentication token
+          required: true
+      body:
+        # only a superuser is authorized to change a users's superuser status
+        application/json:
+          type: !include UserUpdateRequestSchema.json
+      responses:
+        200:
+          description: Success
+        403:
+          description: Authentication/authorization error
+          body:
+            application/json:
+              type: !include ErrorResultSchema.json
+        404: 
+          description: User not found
+          body:
+            application/json:
+              type: !include ErrorResultSchema.json
     delete:
+      description: Remove a user
+      queryParameters:
+        token:
+          displayName: Access Token
+          type: string
+          description: User's authentication token
+          required: true
+      responses:
+        200:
+          description: Success
+        403:
+          description: Authentication/authorization error
+          body:
+            application/json:
+              type: !include ErrorResultSchema.json
+        404: 
+          description: User not found
+          body:
+            application/json:
+              type: !include ErrorResultSchema.json
     /memberships:
       get:
-      put:
-      delete:
+      /{group_name}:
+        get:
+        put:
+        delete:
 /find_user:
   get:
     description: Look up a user account by globus ID
@@ -39,21 +136,11 @@ version: v1alpha1
         body:
           application/json:
             type: !include ErrorResultSchema.json
-            example: |
-              {
-                "kind": "Error",
-                "message": "Not authorized"
-              }
       404:
         description: User not found error
         body:
           application/json:
             type: !include ErrorResultSchema.json
-            example: |
-              {
-                "kind": "Error",
-                "message": "User not found"
-              }
 /groups:
   /{group_name}:
     get:
