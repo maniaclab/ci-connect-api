@@ -1,0 +1,97 @@
+#%RAML 1.0
+---
+title: CIConnect API
+baseUri: http://127.0.0.1:18080/{version}
+version: v1alpha1
+
+/users:
+  post:
+  /{user_ID}:
+    get:
+    put:
+    delete:
+    /memberships:
+      get:
+      put:
+      delete:
+/find_user:
+  get:
+    description: Look up a user account by globus ID
+    # only superusers are permitted to use this request
+    queryParameters:
+      token:
+        displayName: Access Token
+        type: string
+        description: User's authentication token
+        required: true
+      globus_id:
+        displayName: Globus ID
+        type: string
+        description: User's globus UUID
+        required: true
+    responses:
+      200:
+        description: Credentials for the relevent user
+        body:
+          application/json: !include FindUserResultSchema.json
+      403:
+        description: Authentication/authorization error
+        body:
+          application/json:
+            type: !include ErrorResultSchema.json
+            example: |
+              {
+                "kind": "Error",
+                "message": "Not authorized"
+              }
+      404:
+        description: User not found error
+        body:
+          application/json:
+            type: !include ErrorResultSchema.json
+            example: |
+              {
+                "kind": "Error",
+                "message": "User not found"
+              }
+/groups:
+  /{group_name}:
+    get:
+    put:
+    delete:
+    /members:
+      get:
+      /{user_ID}:
+        get:
+        put:
+        delete:
+    /subgroups:
+      get:
+      put:
+/multiplex:
+  post:
+    description: Execute multiple requests concurrently
+    queryParameters:
+      token:
+        displayName: Access Token
+        type: string
+        description: User's authentication token
+        required: true
+    body:
+      application/json:
+        type: !include MultiplexRequestSchema.json
+    responses:
+      200:
+        decsription: Success
+        body:
+          application/json: !include MultiplexResultSchema.json
+      400:
+        description: Invalid input
+        body:
+          application/json:
+            type: !include ErrorResultSchema.json
+      403:
+        description: Authentication/authorization error
+        body:
+          application/json:
+            type: !include ErrorResultSchema.json
