@@ -40,7 +40,7 @@
         "superuser": {
           "type": "boolean"
         },
-        "groups_memberships": {
+        "group_memberships": {
           "type": "array",
           "items": {
             "type": "object",

@@ -86,6 +86,7 @@ version: v1alpha1
               type: !include ErrorResultSchema.json
     delete:
       description: Remove a user
+      # only the user in question of a superuser should be able to delete an account
       queryParameters:
         token:
           displayName: Access Token
@@ -107,10 +108,121 @@ version: v1alpha1
               type: !include ErrorResultSchema.json
     /memberships:
       get:
+        description: List all of a user's group memberships
+        queryParameters:
+          token:
+            displayName: Access Token
+            type: string
+            description: User's authentication token
+            required: true
+        responses:
+          200:
+            description: Success
+            body:
+              application/json:
+                type: !include UserGroupsMembershipResultSchema.json
+          403:
+            description: Authentication/authorization error
+            body:
+              application/json:
+                type: !include ErrorResultSchema.json
+          404: 
+            description: User not found
+            body:
+              application/json:
+                type: !include ErrorResultSchema.json
       /{group_name}:
         get:
+          description: Get a user's membership status in a group
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          responses:
+            200:
+              description: Success
+              body:
+                application/json:
+                  type: !include UserGroupMembershipResultSchema.json
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description: User not found, group not found, user not member of group
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
         put:
+          description: Change a user's membership status in a group
+          # Allowed state transitions and required permissions
+          #
+          #                  D
+          #            P     i
+          #            e A   s
+          #            n c A a
+          #            d t d b
+          #            i i m l
+          #            n v i e
+          #            g e n d
+          #          +---------
+          #  Pending | - g g x
+          #   Active | x - g G
+          #    Admin | x g - G
+          # Disabled | x s s -
+          #
+          # -: No-op
+          # x: Forbidden
+          # g: Group admin
+          # G: Group or enclosing group admin
+          # s: Admin of whichever group set disabled status
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          body:
+            application/json:
+              type: !include UserGroupMembershipUpdateRequestSchema.json
+          responses:
+            200:
+              description: Success
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description: User not found, group not found
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
         delete:
+          description: Remove a user from a group
+          # Implicitly removes the user from all subgroups on success
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          responses:
+            200:
+              description: Success
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description: User not found, group not found, user not member of group
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
 /find_user:
   get:
     description: Look up a user account by globus ID
@@ -144,17 +256,217 @@ version: v1alpha1
 /groups:
   /{group_name}:
     get:
+      description: Get information about a group
+      queryParameters:
+        token:
+          displayName: Access Token
+          type: string
+          description: User's authentication token
+          required: true
+      responses:
+        200:
+          description: Success
+          body:
+            application/json:
+              type: !include GroupInfoResultSchema.json
+        403:
+          description: Authentication/authorization error
+          body:
+            application/json:
+              type: !include ErrorResultSchema.json
+        404: 
+          description: Group not found
+          body:
+            application/json:
+              type: !include ErrorResultSchema.json
     put:
+      description: Update a group's information
+      queryParameters:
+        token:
+          displayName: Access Token
+          type: string
+          description: User's authentication token
+          required: true
+      body:
+        application/json:
+          type: !include GroupUpdateRequestSchema.json
+      responses:
+        200:
+          description: Success
+        403:
+          description: Authentication/authorization error
+          body:
+            application/json:
+              type: !include ErrorResultSchema.json
+        404: 
+          description: Group not found
+          body:
+            application/json:
+              type: !include ErrorResultSchema.json
     delete:
+      description: Destroy a group
+      # admins of a group or the directly enclosing group can destroy it
+      queryParameters:
+        token:
+          displayName: Access Token
+          type: string
+          description: User's authentication token
+          required: true
+      responses:
+        200:
+          description: Success
+        403:
+          description: Authentication/authorization error
+          body:
+            application/json:
+              type: !include ErrorResultSchema.json
+        404: 
+          description: Group not found
+          body:
+            application/json:
+              type: !include ErrorResultSchema.json
     /members:
       get:
+        description: List all of a group's members
+        queryParameters:
+          token:
+            displayName: Access Token
+            type: string
+            description: User's authentication token
+            required: true
+        responses:
+          200:
+            description: Success
+            body:
+              application/json:
+                type: !include GroupUsersMembershipResultSchema.json
+          403:
+            description: Authentication/authorization error
+            body:
+              application/json:
+                type: !include ErrorResultSchema.json
+          404: 
+            description: User not found
+            body:
+              application/json:
+                type: !include ErrorResultSchema.json
       /{user_ID}:
         get:
+          description: Get a user's membership status in a group
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          responses:
+            200:
+              description: Success
+              body:
+                application/json:
+                  type: !include GroupUserMembershipResultSchema.json
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description: User not found, group not found, user not member of group
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
         put:
+          description: Change a user's membership status in a group
+          # Allowed state transitions and required permissions
+          #
+          #                  D
+          #            P     i
+          #            e A   s
+          #            n c A a
+          #            d t d b
+          #            i i m l
+          #            n v i e
+          #            g e n d
+          #          +---------
+          #  Pending | - g g x
+          #   Active | x - g G
+          #    Admin | x g - G
+          # Disabled | x s s -
+          #
+          # -: No-op
+          # x: Forbidden
+          # g: Group admin
+          # G: Group or enclosing group admin
+          # s: Admin of whichever group set disabled status
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          body:
+            application/json:
+              type: !include UserGroupMembershipUpdateRequestSchema.json
+          responses:
+            200:
+              description: Success
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description: User not found, group not found
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
         delete:
+          description: Remove a user from a group
+          # Implicitly removes the user from all subgroups on success
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          responses:
+            200:
+              description: Success
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description: User not found, group not found, user not member of group
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
     /subgroups:
       get:
-      put:
+        description: List a group's subgroups
+        queryParameters:
+          token:
+            displayName: Access Token
+            type: string
+            description: User's authentication token
+            required: true
+        responses:
+          200:
+            description: Success
+            body:
+              application/json:
+                type: !include GroupListResultSchema.json
+          403:
+            description: Authentication/authorization error
+            body:
+              application/json:
+                type: !include ErrorResultSchema.json
+          404: 
+            description: User not found, group not found, user not member of group
+            body:
+              application/json:
+                type: !include ErrorResultSchema.json
 /multiplex:
   post:
     description: Execute multiple requests concurrently
