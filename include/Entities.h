@@ -78,8 +78,11 @@ struct GroupMembership{
 		Admin,
 		Disabled
 	} state;
+	std::string stateSetBy;
 	
 	explicit operator bool() const{ return valid; }
+	
+	bool isMember() const{ return state==Active || state==Admin; }
 	
 	static std::string to_string(Status status);
 	static Status from_string(const std::string& status);

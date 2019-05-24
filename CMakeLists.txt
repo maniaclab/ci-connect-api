@@ -177,13 +177,9 @@ if(BUILD_SERVER)
     ${CMAKE_SOURCE_DIR}/src/PersistentStore.cpp
     ${CMAKE_SOURCE_DIR}/src/Utilities.cpp
     ${CMAKE_SOURCE_DIR}/src/ServerUtilities.cpp
-#     ${CMAKE_SOURCE_DIR}/src/ApplicationCommands.cpp
-#     ${CMAKE_SOURCE_DIR}/src/ApplicationInstanceCommands.cpp
-#     ${CMAKE_SOURCE_DIR}/src/ClusterCommands.cpp
-#     ${CMAKE_SOURCE_DIR}/src/SecretCommands.cpp
-#     ${CMAKE_SOURCE_DIR}/src/UserCommands.cpp
-#     ${CMAKE_SOURCE_DIR}/src/GroupCommands.cpp
-#     ${CMAKE_SOURCE_DIR}/src/VersionCommands.cpp
+     ${CMAKE_SOURCE_DIR}/src/UserCommands.cpp
+     ${CMAKE_SOURCE_DIR}/src/GroupCommands.cpp
+     ${CMAKE_SOURCE_DIR}/src/VersionCommands.cpp
 #   
 #     ${CMAKE_SOURCE_DIR}/src/Archive.cpp
 #     ${CMAKE_SOURCE_DIR}/src/FileHandle.cpp

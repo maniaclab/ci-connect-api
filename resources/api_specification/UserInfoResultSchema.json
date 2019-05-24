@@ -40,6 +40,9 @@
         "superuser": {
           "type": "boolean"
         },
+        "service_account": {
+          "type": "boolean"
+        },
         "group_memberships": {
           "type": "array",
           "items": {
@@ -60,7 +63,7 @@
           }
         }
       },
-      "required": ["id","name","email","phone","institution","access_token","admin","groups"]
+      "required": ["id","name","email","phone","institution","access_token","superuser","service_account","groups"]
     }
   },
   "required": ["apiVersion","kind","metadata"]

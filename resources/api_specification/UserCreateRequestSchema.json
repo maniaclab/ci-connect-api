@@ -40,6 +40,10 @@
         "superuser": {
           "type": "boolean",
           "required": true
+        },
+        "service_account": {
+          "type": "boolean",
+          "required": true
         }
       }
     }

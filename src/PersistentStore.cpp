@@ -256,6 +256,7 @@ void PersistentStore::InitializeUserTable(std::string bootstrapUserFile){
 				if(credFile.fail())
 					log_fatal("Unable to read root user credentials");
 				root.globusID="No Globus ID";
+				root.sshKey="No SSH key";
 				root.superuser=true;
 				root.serviceAccount=true;
 				root.valid=true;
@@ -343,7 +344,7 @@ void PersistentStore::InitializeGroupTable(){
 			AttDef().WithAttributeName("sortKey").WithAttributeType(SAT::S),
 		});
 		request.SetKeySchema({
-			KeySchemaElement().WithAttributeName("ID").WithKeyType(KeyType::HASH),
+			KeySchemaElement().WithAttributeName("name").WithKeyType(KeyType::HASH),
 			KeySchemaElement().WithAttributeName("sortKey").WithKeyType(KeyType::RANGE)
 		});
 		request.SetProvisionedThroughput(ProvisionedThroughput()
@@ -772,7 +773,8 @@ bool PersistentStore::addUserToGroup(const GroupMembership& membership){
 		{"ID",AttributeValue(membership.userID)},
 		{"sortKey",AttributeValue(membership.userID+":"+membership.groupName)},
 		{"groupName",AttributeValue(membership.groupName)},
-		{"state",AttributeValue(GroupMembership::to_string(membership.state))}
+		{"state",AttributeValue(GroupMembership::to_string(membership.state))},
+		{"stateSetBy",AttributeValue(membership.stateSetBy)}
 	});
 	auto outcome=dbClient.PutItem(request);
 	if(!outcome.IsSuccess()){
@@ -861,6 +863,7 @@ std::vector<GroupMembership> PersistentStore::getUserGroupMemberships(const std:
 			membership.userID=uID;
 			membership.groupName=findOrThrow(item,"groupName","membership record missing group name attribute").GetS();
 			membership.state=GroupMembership::from_string(findOrThrow(item,"state","membership record missing state attribute").GetS());
+			membership.stateSetBy=findOrThrow(item,"stateSetBy","membership record missing state set by attribute").GetS();
 			membership.valid=true;
 			memberships.push_back(membership);
 			//TODO: update caches
@@ -909,6 +912,7 @@ GroupMembership PersistentStore::userStatusInGroup(const std::string& uID, std::
 		membership.userID=uID;
 		membership.groupName=groupName;
 		membership.state=GroupMembership::from_string(findOrThrow(item,"state","membership record missing state attribute").GetS());
+		membership.stateSetBy=findOrThrow(item,"stateSetBy","membership record missing state set by attribute").GetS();
 	}
 	
 	//update cache
@@ -1045,6 +1049,7 @@ std::vector<GroupMembership> PersistentStore::getMembersOfGroup(const std::strin
 		membership.userID=findOrThrow(item,"ID","membership record missing user ID attribute").GetS();
 		membership.groupName=groupName;
 		membership.state=GroupMembership::from_string(findOrThrow(item,"state","membership record missing state attribute").GetS());
+		membership.stateSetBy=findOrThrow(item,"stateSetBy","membership record missing state set by attribute").GetS();
 		membership.valid=true;
 		memberships.push_back(membership);
 		

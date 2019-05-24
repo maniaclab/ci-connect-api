@@ -13,13 +13,9 @@
 // #include "Process.h"
 #include "ServerUtilities.h"
 
-// #include "ApplicationCommands.h"
-// #include "ApplicationInstanceCommands.h"
-// #include "ClusterCommands.h"
-// #include "SecretCommands.h"
-// #include "UserCommands.h"
-// #include "GroupCommands.h"
-// #include "VersionCommands.h"
+#include "UserCommands.h"
+#include "GroupCommands.h"
+#include "VersionCommands.h"
 
 struct Configuration{
 	struct ParamRef{
@@ -305,7 +301,7 @@ int main(int argc, char* argv[]){
 	  [&](const crow::request& req){ return multiplex(server,store,req); });
 	
 	// == User commands ==
-	/*CROW_ROUTE(server, "/v1alpha1/users").methods("GET"_method)(
+	CROW_ROUTE(server, "/v1alpha1/users").methods("GET"_method)(
 	  [&](const crow::request& req){ return listUsers(store,req); });
 	CROW_ROUTE(server, "/v1alpha1/users").methods("POST"_method)(
 	  [&](const crow::request& req){ return createUser(store,req); });
@@ -316,7 +312,9 @@ int main(int argc, char* argv[]){
 	CROW_ROUTE(server, "/v1alpha1/users/<string>").methods("DELETE"_method)(
 	  [&](const crow::request& req, const std::string& uID){ return deleteUser(store,req,uID); });
 	CROW_ROUTE(server, "/v1alpha1/users/<string>/groups").methods("GET"_method)(
-	  [&](const crow::request& req, const std::string& uID){ return listUsergroups(store,req,uID); });
+	  [&](const crow::request& req, const std::string& uID){ return listUserGroups(store,req,uID); });
+	//CROW_ROUTE(server, "/v1alpha1/users/<string>/groups/<string>").methods("GET"_method)(
+	//  [&](const crow::request& req, const std::string& userID, const std::string& groupID){ return getGroupMemberStatus(store,req,userID,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/users/<string>/groups/<string>").methods("PUT"_method)(
 	  [&](const crow::request& req, const std::string& uID, const std::string groupID){ return addUserToGroup(store,req,uID,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/users/<string>/groups/<string>").methods("DELETE"_method)(
@@ -327,10 +325,8 @@ int main(int argc, char* argv[]){
 	  [&](const crow::request& req){ return findUser(store,req); });
 	
 	// == Group commands ==
-	CROW_ROUTE(server, "/v1alpha1/groups").methods("GET"_method)(
+	/*CROW_ROUTE(server, "/v1alpha1/groups").methods("GET"_method)(
 	  [&](const crow::request& req){ return listGroups(store,req); });
-	CROW_ROUTE(server, "/v1alpha1/groups").methods("POST"_method)(
-	  [&](const crow::request& req){ return createGroup(store,req); });
 	CROW_ROUTE(server, "/v1alpha1/groups/<string>").methods("GET"_method)(
 	  [&](const crow::request& req, const std::string& groupID){ return getGroupInfo(store,req,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/groups/<string>").methods("PUT"_method)(
@@ -339,8 +335,14 @@ int main(int argc, char* argv[]){
 	  [&](const crow::request& req, const std::string& groupID){ return deleteGroup(store,req,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/groups/<string>/members").methods("GET"_method)(
 	  [&](const crow::request& req, const std::string& groupID){ return listGroupMembers(store,req,groupID); });
-	CROW_ROUTE(server, "/v1alpha1/groups/<string>/clusters").methods("GET"_method)(
-	  [&](const crow::request& req, const std::string& groupID){ return listGroupClusters(store,req,groupID); });*/
+	CROW_ROUTE(server, "/v1alpha1/groups/<string>/members/<string>").methods("GET"_method)(
+	  [&](const crow::request& req, const std::string& groupID, const std::string& userID){ return getGroupMemberStatus(store,req,userID,groupID); });
+	CROW_ROUTE(server, "/v1alpha1/groups/<string>/members/<string>").methods("PUT"_method)(
+	  [&](const crow::request& req, const std::string groupID, const std::string& uID){ return addUserToGroup(store,req,uID,groupID); });
+	CROW_ROUTE(server, "/v1alpha1/groups/<string>/members/<string>").methods("DELETE"_method)(
+	  [&](const crow::request& req, const std::string groupID, const std::string& uID){ return removeUserFromGroup(store,req,uID,groupID); });
+	CROW_ROUTE(server, "/v1alpha1/groups/<string>/subgroups").methods("GET"_method)(
+	  [&](const crow::request& req, const std::string& groupID){ return getSubgroups(store,req,groupID); });*/
 	
 	
 	CROW_ROUTE(server, "/v1alpha1/stats").methods("GET"_method)(
