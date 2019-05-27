@@ -9,7 +9,7 @@
 #include "Logging.h"
 #include "ServerUtilities.h"
 #include "server_version.h"
-/*
+
 namespace{
 	const char* scienceFields[]={
 		"Resource Provider",
@@ -105,10 +105,10 @@ crow::response listGroups(PersistentStore& store, const crow::request& req){
 
 	std::vector<Group> vos;
 
-	if (req.url_params.get("user"))
-		vos=store.listgroupsForUser(user.id);
-	else
-		vos=store.listgroups();
+	//if (req.url_params.get("user"))
+	//	vos=store.listgroupsForUser(user.id);
+	//else
+		vos=store.listGroups();
 
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
@@ -117,34 +117,38 @@ crow::response listGroups(PersistentStore& store, const crow::request& req){
 	rapidjson::Value resultItems(rapidjson::kArrayType);
 	resultItems.Reserve(vos.size(), alloc);
 	for (const Group& group : vos){
-		rapidjson::Value metadata(rapidjson::kObjectType);
-		metadata.AddMember("id", rapidjson::StringRef(group.id.c_str()), alloc);
-		metadata.AddMember("name", rapidjson::StringRef(group.name.c_str()), alloc);
-		metadata.AddMember("email", rapidjson::StringRef(group.email.c_str()), alloc);
-		metadata.AddMember("phone", rapidjson::StringRef(group.phone.c_str()), alloc);
-		metadata.AddMember("scienceField", rapidjson::StringRef(group.scienceField.c_str()), alloc);
-		metadata.AddMember("description", rapidjson::StringRef(group.description.c_str()), alloc);
-
 		rapidjson::Value groupResult(rapidjson::kObjectType);
-		groupResult.AddMember("apiVersion", "v1alpha3", alloc);
-		groupResult.AddMember("kind", "Group", alloc);
-		groupResult.AddMember("metadata", metadata, alloc);
+		groupResult.AddMember("name", group.name, alloc);
+		groupResult.AddMember("email", group.email, alloc);
+		groupResult.AddMember("phone", group.phone, alloc);
+		groupResult.AddMember("filed_of_science", group.scienceField, alloc);
+		groupResult.AddMember("description", group.description, alloc);
 		resultItems.PushBack(groupResult, alloc);
 	}
-	result.AddMember("items", resultItems, alloc);
+	result.AddMember("groups", resultItems, alloc);
 	
 	return crow::response(to_string(result));
 }
 
-crow::response createGroup(PersistentStore& store, const crow::request& req){
+crow::response createGroup(PersistentStore& store, const crow::request& req, 
+                           const std::string& parentGroupName, const std::string& newGroupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to create a Group");
+	log_info(user << " requested to create group " << newGroupName << " within " << parentGroupName);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
-	//TODO: Are all users allowed to create/register groups?
-	//TODO: What other information is required to register a Group?
+	Group parentGroup=store.getGroup(parentGroupName);
+	if(!parentGroup) //the parent group must exist
+		return crow::response(404,generateError("Parent group not found"));
+	//only an admin in the parent group may create child groups
+	if(store.userStatusInGroup(user.id,parentGroup.name).state!=GroupMembership::Admin)
+		return crow::response(403,generateError("Not authorized"));
+	{
+		Group existingGroup=store.getGroup(newGroupName);
+		if(existingGroup) //the group must not already exist
+			return crow::response(400,generateError("Group already exists"));
+	}
 	
-	//unpack the target user info
+	//unpack the target info
 	rapidjson::Document body;
 	try{
 		body.Parse(req.body.c_str());
@@ -178,8 +182,8 @@ crow::response createGroup(PersistentStore& store, const crow::request& req){
 		return crow::response(400,generateError("Incorrect type for Group description"));
 	
 	Group group;
-	group.id=idGenerator.generateGroupID();
 	
+	//TODO: update name validation
 	group.name=body["metadata"]["name"].GetString();
 	if(group.name.empty())
 		return crow::response(400,generateError("Group names may not be the empty string"));
@@ -191,8 +195,6 @@ crow::response createGroup(PersistentStore& store, const crow::request& req){
 		return crow::response(400,generateError("Group names may not be more than 54 characters long"));
 	if(group.name.find(IDGenerator::groupIDPrefix)==0)
 		return crow::response(400,generateError("Group names may not begin with "+IDGenerator::groupIDPrefix));
-	if(store.findGroupByName(group.name))
-		return crow::response(400,generateError("Group name is already in use"));
 	
 	if(body["metadata"].HasMember("email"))
 		group.email=body["metadata"]["email"].GetString();
@@ -208,7 +210,7 @@ crow::response createGroup(PersistentStore& store, const crow::request& req){
 	if(group.phone.empty())
 		group.phone=" "; //Dynamo will get upset if a string is empty
 	
-	if(body["metadata"].HasMember("scienceField"))
+	if(body["metadata"].HasMember("field_of_science"))
 		group.scienceField=normalizeScienceField(body["metadata"]["scienceField"].GetString());
 	if(group.scienceField.empty())
 		return crow::response(400,generateError("Unrecognized value for Group scienceField\n"
@@ -227,7 +229,13 @@ crow::response createGroup(PersistentStore& store, const crow::request& req){
 		return crow::response(500,generateError("Group creation failed"));
 	
 	//Make the creating user an initial member of the group
-	bool added=store.addUserToGroup(user.id, group.id);
+	GroupMembership initialAdmin;
+	initialAdmin.userID=user.id;
+	initialAdmin.groupName=group.name;
+	initialAdmin.state=GroupMembership::Admin;
+	initialAdmin.stateSetBy=user.id;
+	initialAdmin.valid=true;
+	bool added=store.addUserToGroup(initialAdmin);
 	if(!added){
 		//TODO: possible problem: If we get here, we may end up with a valid group
 		//but with no members and not return its ID either
@@ -246,11 +254,10 @@ crow::response createGroup(PersistentStore& store, const crow::request& req){
 	result.AddMember("apiVersion", "v1alpha3", alloc);
 	result.AddMember("kind", "Group", alloc);
 	rapidjson::Value metadata(rapidjson::kObjectType);
-	metadata.AddMember("id", rapidjson::StringRef(group.id.c_str()), alloc);
 	metadata.AddMember("name", rapidjson::StringRef(group.name.c_str()), alloc);
 	metadata.AddMember("email", rapidjson::StringRef(group.email.c_str()), alloc);
 	metadata.AddMember("phone", rapidjson::StringRef(group.phone.c_str()), alloc);
-	metadata.AddMember("scienceField", rapidjson::StringRef(group.scienceField.c_str()), alloc);
+	metadata.AddMember("field_of_science", rapidjson::StringRef(group.scienceField.c_str()), alloc);
 	metadata.AddMember("description", rapidjson::StringRef(group.description.c_str()), alloc);
 	result.AddMember("metadata", metadata, alloc);
 	
@@ -274,7 +281,6 @@ crow::response getGroupInfo(PersistentStore& store, const crow::request& req, co
 	
 	result.AddMember("apiVersion", "v1alpha3", alloc);
 	rapidjson::Value metadata(rapidjson::kObjectType);
-	metadata.AddMember("id", rapidjson::StringRef(group.id.c_str()), alloc);
 	metadata.AddMember("name", rapidjson::StringRef(group.name.c_str()), alloc);
 	metadata.AddMember("email", rapidjson::StringRef(group.email.c_str()), alloc);
 	metadata.AddMember("phone", rapidjson::StringRef(group.phone.c_str()), alloc);
@@ -291,8 +297,8 @@ crow::response updateGroup(PersistentStore& store, const crow::request& req, con
 	log_info(user << " requested to update " << groupID);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
-	//Only admins and members of a Group can alter it
-	if(!user.admin && !store.userInGroup(user.id,groupID))
+	//Only superusers and admins of a Group can alter it
+	if(!user.superuser || store.userStatusInGroup(user.id,groupID).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
 	
 	Group targetGroup = store.getGroup(groupID);
@@ -363,8 +369,8 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, con
 	log_info(user << " requested to delete " << groupID);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
-	//Only admins and members of a Group can delete it
-	if(!user.admin && !store.userInGroup(user.id,groupID))
+	//Only superusers and admins of a Group can alter it
+	if(!user.superuser || store.userStatusInGroup(user.id,groupID).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
 	
 	Group targetGroup = store.getGroup(groupID);
@@ -373,52 +379,10 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, con
 		return crow::response(404,generateError("Group not found"));
 	
 	log_info("Deleting " << targetGroup);
-	bool deleted = store.removeGroup(targetGroup.id);
+	bool deleted = store.removeGroup(targetGroup.name);
 
 	if (!deleted)
 		return crow::response(500, generateError("Group deletion failed"));
-	
-	std::vector<std::future<void>> work;
-	
-	// Remove all instances owned by the group
-	for(auto& instance : store.listApplicationInstancesByClusterOrGroup(targetGroup.id,""))
-		work.emplace_back(std::async(std::launch::async,[&store,instance](){ internal::deleteApplicationInstance(store,instance,true); }));
-	
-	// Remove all secrets owned by the group
-	for(auto& secret : store.listSecrets(targetGroup.id,""))
-		work.emplace_back(std::async(std::launch::async,[&store,secret](){ internal::deleteSecret(store,secret,true); }));
-	
-	// Remove the Group's namespace on each cluster
-	auto cluster_names = store.listClusters();
-	for (auto& cluster : cluster_names){
-		work.emplace_back(std::async(std::launch::async,[&store,&targetGroup,cluster](){
-			try{
-				kubernetes::kubectl_delete_namespace(*store.configPathForCluster(cluster.id), targetGroup);
-			}
-			catch(std::runtime_error& err){
-				log_error("Failed to delete " << targetGroup << " namespace from " << cluster << ": " << err.what());
-			}
-		}));
-	}
-	
-	//make sure all instances, secrets, and namespaces are deleted before
-	//deleting any clusters, since some of the other objects may be on clusters
-	//to be deleted
-	for(auto& item : work)
-		item.wait();
-	work.clear();
-	
-	// Remove all clusters owned by the group
-	for(auto& cluster : cluster_names){
-		if(cluster.owningGroup==targetGroup.id)
-			work.emplace_back(std::async(std::launch::async,[&store,cluster](){
-				internal::deleteCluster(store,cluster,true);
-			}));
-	}
-	
-	//make sure all cluster deletions are done
-	for(auto& item : work)
-		item.wait();
 	
 	return(crow::response(200));
 }
@@ -432,71 +396,48 @@ crow::response listGroupMembers(PersistentStore& store, const crow::request& req
 	Group targetGroup = store.getGroup(groupID);
 	if(!targetGroup)
 		return crow::response(404,generateError("Group not found"));
-	//Only admins and members of a Group can list its members
-	if(!user.admin && !store.userInGroup(user.id,targetGroup.id))
-		return crow::response(403,generateError("Not authorized"));
 	
-	auto userIDs=store.getMembersOfGroup(targetGroup.id);
+	auto memberships=store.getMembersOfGroup(targetGroup.name);
 	
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
 	
 	result.AddMember("apiVersion", "v1alpha3", alloc);
 	rapidjson::Value resultItems(rapidjson::kArrayType);
-	resultItems.Reserve(userIDs.size(), alloc);
-	for(const std::string& userID : userIDs){
-		User user=store.getUser(userID);
+	resultItems.Reserve(memberships.size(), alloc);
+	for(const auto& membership : memberships){
 		rapidjson::Value userResult(rapidjson::kObjectType);
-		userResult.AddMember("apiVersion", "v1alpha3", alloc);
-		userResult.AddMember("kind", "User", alloc);
-		rapidjson::Value userData(rapidjson::kObjectType);
-		userData.AddMember("id", user.id, alloc);
-		userData.AddMember("name", user.name, alloc);
-		userData.AddMember("email", user.email, alloc);
-		userData.AddMember("phone", user.phone, alloc);
-		userData.AddMember("institution", user.institution, alloc);
-		userResult.AddMember("metadata", userData, alloc);
+		userResult.AddMember("id", membership.userID, alloc);
+		userResult.AddMember("state", GroupMembership::to_string(membership.state), alloc);
+		userResult.AddMember("state_set_by", membership.stateSetBy, alloc);
 		resultItems.PushBack(userResult, alloc);
 	}
-	result.AddMember("items", resultItems, alloc);
+	result.AddMember("memberships", resultItems, alloc);
 	
 	return crow::response(to_string(result));
 }
 
-crow::response listGroupClusters(PersistentStore& store, const crow::request& req, const std::string& groupID){
+crow::response getGroupMemberStatus(PersistentStore& store, const crow::request& req, const std::string& userID, const std::string& groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to list clusters owned by " << groupID);
+	log_info(user << " requested to get membership status of " << userID << " in " << groupName);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
-	Group targetGroup = store.getGroup(groupID);
-	if(!targetGroup)
-		return crow::response(404,generateError("Group not found"));
-	//anyone can list a Group's clusters?
-	
-	auto clusterIDs=store.clustersOwnedByGroup(targetGroup.id);
+	GroupMembership membership=store.userStatusInGroup(userID, groupName);
 	
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
 	
 	result.AddMember("apiVersion", "v1alpha3", alloc);
-	rapidjson::Value resultItems(rapidjson::kArrayType);
-	resultItems.Reserve(clusterIDs.size(), alloc);
-	for(const std::string& clusterID : clusterIDs){
-		Cluster cluster=store.getCluster(clusterID);
-		rapidjson::Value clusterResult(rapidjson::kObjectType);
-		clusterResult.AddMember("apiVersion", "v1alpha3", alloc);
-		clusterResult.AddMember("kind", "Cluster", alloc);
-		rapidjson::Value clusterData(rapidjson::kObjectType);
-		clusterData.AddMember("id", cluster.id, alloc);
-		clusterData.AddMember("name", cluster.name, alloc);
-		clusterData.AddMember("owningGroup", targetGroup.name, alloc);
-		clusterData.AddMember("owningOrganization", cluster.owningOrganization, alloc);
-		clusterResult.AddMember("metadata", clusterData, alloc);
-		resultItems.PushBack(clusterResult, alloc);
-	}
-	result.AddMember("items", resultItems, alloc);
-
+	rapidjson::Value data(rapidjson::kObjectType);
+	data.AddMember("user_id", membership.userID, alloc);
+	data.AddMember("state", GroupMembership::to_string(membership.state), alloc);
+	data.AddMember("state_set_by", membership.stateSetBy, alloc);		
+	result.AddMember("membership", data, alloc);
+	
 	return crow::response(to_string(result));
 }
-*/
+
+crow::response getSubgroups(PersistentStore& store, const crow::request& req, const std::string& groupName){
+	return crow::response(500,generateError("Not implemented"));
+}

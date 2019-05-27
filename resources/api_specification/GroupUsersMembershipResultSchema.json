@@ -8,7 +8,7 @@
       "type": "string",
       "enum": [ "v1alpha1" ]
     },
-    "user_memberships": {
+    "memberships": {
       "type": "array",
       "items": {
         "type": "object",

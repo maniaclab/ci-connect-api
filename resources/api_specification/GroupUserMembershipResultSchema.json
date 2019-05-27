@@ -8,7 +8,7 @@
       "type": "string",
       "enum": [ "v1alpha1" ]
     },
-    "group_membership": {
+    "membership": {
       "type": "object",
       "properties": {
         "user_id": {
@@ -16,7 +16,7 @@
         },
         "state": {
           "type": "string",
-          "enum": ["pending","active","admin","disabled"]
+          "enum": ["nonmember","pending","active","admin","disabled"]
         },
         "state_set_by": {
           "type": "string"

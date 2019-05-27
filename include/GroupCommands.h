@@ -8,7 +8,8 @@
 ///List currently groups which exist
 crow::response listGroups(PersistentStore& store, const crow::request& req);
 ///Register a new group
-crow::response createGroup(PersistentStore& store, const crow::request& req);
+crow::response createGroup(PersistentStore& store, const crow::request& req, 
+                           const std::string& parentGroupName, const std::string& newGroupName);
 ///Get a Group's information
 ///\param groupID the Group to look up
 crow::response getGroupInfo(PersistentStore& store, const crow::request& req, const std::string& groupID);
