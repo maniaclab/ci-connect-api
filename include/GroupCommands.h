@@ -9,22 +9,22 @@
 crow::response listGroups(PersistentStore& store, const crow::request& req);
 ///Register a new group
 crow::response createGroup(PersistentStore& store, const crow::request& req, 
-                           const std::string& parentGroupName, const std::string& newGroupName);
+                           std::string parentGroupName, std::string newGroupName);
 ///Get a Group's information
 ///\param groupID the Group to look up
-crow::response getGroupInfo(PersistentStore& store, const crow::request& req, const std::string& groupID);
+crow::response getGroupInfo(PersistentStore& store, const crow::request& req, std::string groupName);
 ///Change a Group's information
 ///\param groupID the Group to update
-crow::response updateGroup(PersistentStore& store, const crow::request& req, const std::string& groupID);
+crow::response updateGroup(PersistentStore& store, const crow::request& req, std::string groupName);
 ///Delete a group
 ///\param groupID the Group to destroy
-crow::response deleteGroup(PersistentStore& store, const crow::request& req, const std::string& groupID);
+crow::response deleteGroup(PersistentStore& store, const crow::request& req, std::string groupName);
 ///List the users who belong to a group
 ///\param groupID the Group to list
-crow::response listGroupMembers(PersistentStore& store, const crow::request& req, const std::string& groupID);
+crow::response listGroupMembers(PersistentStore& store, const crow::request& req, std::string groupName);
 
-crow::response getGroupMemberStatus(PersistentStore& store, const crow::request& req, const std::string& userID, const std::string& groupName);
+crow::response getGroupMemberStatus(PersistentStore& store, const crow::request& req, const std::string& userID, std::string groupName);
 
-crow::response getSubgroups(PersistentStore& store, const crow::request& req, const std::string& groupName);
+crow::response getSubgroups(PersistentStore& store, const crow::request& req, std::string groupName);
 
 #endif //SLATE_GroupCOMMANDS_H

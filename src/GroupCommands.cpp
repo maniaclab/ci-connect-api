@@ -94,6 +94,15 @@ namespace{
 		}
 		return "";
 	}
+	
+	std::string normalizeGroupName(std::string name, const std::string& enclosingGroup=""){
+		if(name.empty()) //empty==root group in normal form already
+			return name;
+		if(name[0]=='.') //leading dot is normal form for all non-root groups
+			return name;
+		//otherwise treat as a relative name
+		return enclosingGroup+"."+name;
+	}
 }
 
 crow::response listGroups(PersistentStore& store, const crow::request& req){
@@ -131,11 +140,14 @@ crow::response listGroups(PersistentStore& store, const crow::request& req){
 }
 
 crow::response createGroup(PersistentStore& store, const crow::request& req, 
-                           const std::string& parentGroupName, const std::string& newGroupName){
+                           std::string parentGroupName, std::string newGroupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
 	log_info(user << " requested to create group " << newGroupName << " within " << parentGroupName);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
+	parentGroupName=normalizeGroupName(parentGroupName);
+	newGroupName=normalizeGroupName(newGroupName,parentGroupName);
+		
 	Group parentGroup=store.getGroup(parentGroupName);
 	if(!parentGroup) //the parent group must exist
 		return crow::response(404,generateError("Parent group not found"));
@@ -264,14 +276,15 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	return crow::response(to_string(result));
 }
 
-crow::response getGroupInfo(PersistentStore& store, const crow::request& req, const std::string& groupID){
+crow::response getGroupInfo(PersistentStore& store, const crow::request& req, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested information about " << groupID);
+	log_info(user << " requested information about " << groupName);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//Any user in the system may query a Group's information
 	
-	Group group = store.getGroup(groupID);
+	groupName=normalizeGroupName(groupName);
+	Group group = store.getGroup(groupName);
 	
 	if(!group)
 		return crow::response(404,generateError("Group not found"));
@@ -292,16 +305,18 @@ crow::response getGroupInfo(PersistentStore& store, const crow::request& req, co
 	return crow::response(to_string(result));
 }
 
-crow::response updateGroup(PersistentStore& store, const crow::request& req, const std::string& groupID){
+crow::response updateGroup(PersistentStore& store, const crow::request& req, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to update " << groupID);
+	log_info(user << " requested to update " << groupName);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
+		
+	groupName=normalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser || store.userStatusInGroup(user.id,groupID).state!=GroupMembership::Admin)
+	if(!user.superuser || store.userStatusInGroup(user.id,groupName).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
 	
-	Group targetGroup = store.getGroup(groupID);
+	Group targetGroup = store.getGroup(groupName);
 	
 	if(!targetGroup)
 		return crow::response(404,generateError("Group not found"));
@@ -364,16 +379,17 @@ crow::response updateGroup(PersistentStore& store, const crow::request& req, con
 	return(crow::response(200));
 }
 
-crow::response deleteGroup(PersistentStore& store, const crow::request& req, const std::string& groupID){
+crow::response deleteGroup(PersistentStore& store, const crow::request& req, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to delete " << groupID);
+	log_info(user << " requested to delete " << groupName);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
+	groupName=normalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser || store.userStatusInGroup(user.id,groupID).state!=GroupMembership::Admin)
+	if(!user.superuser || store.userStatusInGroup(user.id,groupName).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
 	
-	Group targetGroup = store.getGroup(groupID);
+	Group targetGroup = store.getGroup(groupName);
 	
 	if(!targetGroup)
 		return crow::response(404,generateError("Group not found"));
@@ -387,13 +403,14 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, con
 	return(crow::response(200));
 }
 
-crow::response listGroupMembers(PersistentStore& store, const crow::request& req, const std::string& groupID){
+crow::response listGroupMembers(PersistentStore& store, const crow::request& req, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to list members of " << groupID);
+	log_info(user << " requested to list members of " << groupName);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
-	Group targetGroup = store.getGroup(groupID);
+	groupName=normalizeGroupName(groupName);
+	Group targetGroup = store.getGroup(groupName);
 	if(!targetGroup)
 		return crow::response(404,generateError("Group not found"));
 	
@@ -417,12 +434,13 @@ crow::response listGroupMembers(PersistentStore& store, const crow::request& req
 	return crow::response(to_string(result));
 }
 
-crow::response getGroupMemberStatus(PersistentStore& store, const crow::request& req, const std::string& userID, const std::string& groupName){
+crow::response getGroupMemberStatus(PersistentStore& store, const crow::request& req, const std::string& userID, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
 	log_info(user << " requested to get membership status of " << userID << " in " << groupName);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
+	groupName=normalizeGroupName(groupName);
 	GroupMembership membership=store.userStatusInGroup(userID, groupName);
 	
 	rapidjson::Document result(rapidjson::kObjectType);
@@ -438,6 +456,13 @@ crow::response getGroupMemberStatus(PersistentStore& store, const crow::request&
 	return crow::response(to_string(result));
 }
 
-crow::response getSubgroups(PersistentStore& store, const crow::request& req, const std::string& groupName){
+crow::response getSubgroups(PersistentStore& store, const crow::request& req, std::string groupName){
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to get subgroups of " << groupName);
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+	
+	groupName=normalizeGroupName(groupName);
+
 	return crow::response(500,generateError("Not implemented"));
 }
