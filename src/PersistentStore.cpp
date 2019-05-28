@@ -161,7 +161,7 @@ PersistentStore::PersistentStore(const Aws::Auth::AWSCredentials& credentials,
 	log_info("Database client ready");
 }
 
-void PersistentStore::InitializeUserTable(std::string bootstrapUserFile){
+void PersistentStore::InitializeUserTable(){
 	using namespace Aws::DynamoDB::Model;
 	using AttDef=Aws::DynamoDB::Model::AttributeDefinition;
 	using SAT=Aws::DynamoDB::Model::ScalarAttributeType;
@@ -247,20 +247,7 @@ void PersistentStore::InitializeUserTable(std::string bootstrapUserFile){
 		
 		{
 			try{
-				User root;
-				std::ifstream credFile(bootstrapUserFile);
-				if(!credFile)
-					log_fatal("Unable to read portal user credentials");
-				credFile >> root.id >> root.name >> root.email 
-						 >> root.phone >> root.institution >> root.token;
-				if(credFile.fail())
-					log_fatal("Unable to read root user credentials");
-				root.globusID="No Globus ID";
-				root.sshKey="No SSH key";
-				root.superuser=true;
-				root.serviceAccount=true;
-				root.valid=true;
-				if(!addUser(root))
+				if(!addUser(rootUser))
 					log_fatal("Failed to inject root user");
 			}
 			catch(...){
@@ -357,6 +344,40 @@ void PersistentStore::InitializeGroupTable(){
 			log_fatal("Failed to create groups table: " + createOut.GetError().GetMessage());
 		
 		waitTableReadiness(dbClient,groupTableName);
+		
+		{
+			try{
+				Group rootGroup;
+				rootGroup.name=".";
+				rootGroup.email="none";
+				rootGroup.phone="none";
+				rootGroup.scienceField="ResourceProvider";
+				rootGroup.description="Root group which contains all users but is associated with no resources";
+				rootGroup.valid=true;
+				if(!addGroup(rootGroup))
+					log_fatal("Failed to inject root group");
+				
+				GroupMembership rootOwnership;
+				rootOwnership.userID=rootUser.id;
+				rootOwnership.groupName=rootGroup.name;
+				rootOwnership.state=GroupMembership::Admin;
+				rootOwnership.stateSetBy=rootUser.id;
+				rootOwnership.valid=true;
+				if(!addUserToGroup(rootOwnership))
+					log_fatal("Failed to inject root user into root group");
+			}
+			catch(...){
+				log_error("Failed to inject root group; deleting group table");
+				//Demolish the whole table again. This is technically overkill, but it ensures that
+				//on the next start up this step will be run again (hpefully with better results).
+				auto outc=dbClient.DeleteTable(Aws::DynamoDB::Model::DeleteTableRequest().WithTableName(groupTableName));
+				//If the table deletion fails it is still possible to get stuck on a restart, but 
+				//it isn't clear what else could be done about such a failure. 
+				if(!outc.IsSuccess())
+					log_error("Failed to delete group table: " << outc.GetError().GetMessage());
+				throw;
+			}
+		}
 		log_info("Created groups table");
 	}
 	else{ //table exists; check whether any indices are missing
@@ -377,7 +398,24 @@ void PersistentStore::InitializeGroupTable(){
 }
 
 void PersistentStore::InitializeTables(std::string bootstrapUserFile){
-	InitializeUserTable(bootstrapUserFile);
+	{
+		std::ifstream credFile(bootstrapUserFile);
+		if(!credFile)
+			log_fatal("Unable to read root user credentials");
+		credFile >> rootUser.id >> rootUser.name >> rootUser.email 
+				 >> rootUser.phone;
+		credFile.ignore(1024,'\n');
+		std::getline(credFile,rootUser.institution);
+		credFile >> rootUser.token;
+		if(credFile.fail())
+			log_fatal("Unable to read root user credentials");
+		rootUser.globusID="No Globus ID";
+		rootUser.sshKey="No SSH key";
+		rootUser.superuser=true;
+		rootUser.serviceAccount=true;
+		rootUser.valid=true;
+	}
+	InitializeUserTable();
 	InitializeGroupTable();
 }
 
@@ -771,8 +809,8 @@ bool PersistentStore::addUserToGroup(const GroupMembership& membership){
 	  .WithTableName(userTableName)
 	  .WithItem({
 		{"ID",AttributeValue(membership.userID)},
-		{"sortKey",AttributeValue(membership.userID+":"+membership.groupName)},
-		{"groupName",AttributeValue(membership.groupName)},
+		{"sortKey",AttributeValue(membership.userID+":"+encodeGroupName(membership.groupName))},
+		{"groupName",AttributeValue(encodeGroupName(membership.groupName))},
 		{"state",AttributeValue(GroupMembership::to_string(membership.state))},
 		{"stateSetBy",AttributeValue(membership.stateSetBy)}
 	});
@@ -810,7 +848,7 @@ bool PersistentStore::removeUserFromGroup(const std::string& uID, std::string gr
 	auto outcome=dbClient.DeleteItem(Aws::DynamoDB::Model::DeleteItemRequest()
 								     .WithTableName(userTableName)
 								     .WithKey({{"ID",AttributeValue(uID)},
-	                                           {"sortKey",AttributeValue(uID+":"+groupName)}}));
+	                                           {"sortKey",AttributeValue(uID+":"+encodeGroupName(membership.groupName))}}));
 	if(!outcome.IsSuccess()){
 		auto err=outcome.GetError();
 		log_error("Failed to delete user Group membership record: " << err.GetMessage());
@@ -861,7 +899,7 @@ std::vector<GroupMembership> PersistentStore::getUserGroupMemberships(const std:
 		if(item.count("groupName")){
 			GroupMembership membership;
 			membership.userID=uID;
-			membership.groupName=findOrThrow(item,"groupName","membership record missing group name attribute").GetS();
+			membership.groupName=decodeGroupName(findOrThrow(item,"groupName","membership record missing group name attribute").GetS());
 			membership.state=GroupMembership::from_string(findOrThrow(item,"state","membership record missing state attribute").GetS());
 			membership.stateSetBy=findOrThrow(item,"stateSetBy","membership record missing state set by attribute").GetS();
 			membership.valid=true;
@@ -893,7 +931,7 @@ GroupMembership PersistentStore::userStatusInGroup(const std::string& uID, std::
 	auto outcome=dbClient.GetItem(Aws::DynamoDB::Model::GetItemRequest()
 								  .WithTableName(userTableName)
 								  .WithKey({{"ID",AttributeValue(uID)},
-	                                        {"sortKey",AttributeValue(uID+":"+groupName)}}));
+	                                        {"sortKey",AttributeValue(uID+":"+encodeGroupName(groupName))}}));
 	if(!outcome.IsSuccess()){
 		auto err=outcome.GetError();
 		log_error("Failed to fetch user Group membership record: " << err.GetMessage());
@@ -937,8 +975,8 @@ bool PersistentStore::addGroup(const Group& group){
 	using AV=Aws::DynamoDB::Model::AttributeValue;
 	auto outcome=dbClient.PutItem(Aws::DynamoDB::Model::PutItemRequest()
 	                              .WithTableName(groupTableName)
-	                              .WithItem({{"name",AV(group.name)},
-	                                         {"sortKey",AV(group.name)},
+	                              .WithItem({{"name",AV(encodeGroupName(group.name))},
+	                                         {"sortKey",AV(encodeGroupName(group.name))},
 	                                         {"email",AV(group.email)},
 	                                         {"phone",AV(group.phone)},
 	                                         {"scienceField",AV(group.scienceField)},
@@ -975,8 +1013,8 @@ bool PersistentStore::removeGroup(const std::string& groupName){
 	//delete the Group record itself
 	auto outcome=dbClient.DeleteItem(Aws::DynamoDB::Model::DeleteItemRequest()
 								     .WithTableName(groupTableName)
-								     .WithKey({{"ID",AttributeValue(groupName)},
-	                                           {"sortKey",AttributeValue(groupName)}}));
+								     .WithKey({{"ID",AttributeValue(encodeGroupName(groupName))},
+	                                           {"sortKey",AttributeValue(encodeGroupName(groupName))}}));
 	if(!outcome.IsSuccess()){
 		auto err=outcome.GetError();
 		log_error("Failed to delete Group record: " << err.GetMessage());
@@ -990,8 +1028,8 @@ bool PersistentStore::updateGroup(const Group& group){
 	using AVU=Aws::DynamoDB::Model::AttributeValueUpdate;
 	auto outcome=dbClient.UpdateItem(Aws::DynamoDB::Model::UpdateItemRequest()
 	                                 .WithTableName(groupTableName)
-	                                 .WithKey({{"name",AV(group.name)},
-	                                           {"sortKey",AV(group.name)}})
+	                                 .WithKey({{"name",AV(encodeGroupName(group.name))},
+	                                           {"sortKey",AV(encodeGroupName(group.name))}})
 	                                 .WithAttributeUpdates({
 	                                            {"email",AVU().WithValue(AV(group.email))},
 	                                            {"phone",AVU().WithValue(AV(group.phone))},
@@ -1034,7 +1072,7 @@ std::vector<GroupMembership> PersistentStore::getMembersOfGroup(const std::strin
 	                            .WithIndexName("ByGroup")
 	                            .WithKeyConditionExpression("#groupName = :id_val")
 	                            .WithExpressionAttributeNames({{"#groupName","groupName"}})
-								.WithExpressionAttributeValues({{":id_val",AttributeValue(groupName)}})
+								.WithExpressionAttributeValues({{":id_val",AttributeValue(encodeGroupName(groupName))}})
 	                            );
 	std::vector<GroupMembership> memberships;
 	if(!outcome.IsSuccess()){
@@ -1101,7 +1139,7 @@ std::vector<Group> PersistentStore::listGroups(){
 		for(const auto& item : result.GetItems()){
 			Group group;
 			group.valid=true;
-			group.name=findOrThrow(item,"name","Group record missing name attribute").GetS();
+			group.name=decodeGroupName(findOrThrow(item,"name","Group record missing name attribute").GetS());
 			group.email=findOrThrow(item,"email","Group record missing email attribute").GetS();
 			group.phone=findOrThrow(item,"phone","Group record missing phone attribute").GetS();
 			group.scienceField=findOrThrow(item,"scienceField","Group record missing field of science attribute").GetS();
@@ -1135,8 +1173,8 @@ Group PersistentStore::getGroup(const std::string& groupName){
 	using Aws::DynamoDB::Model::AttributeValue;
 	auto outcome=dbClient.GetItem(Aws::DynamoDB::Model::GetItemRequest()
 	                              .WithTableName(groupTableName)
-	                              .WithKey({{"name",AttributeValue(groupName)},
-	                                        {"sortKey",AttributeValue(groupName)}}));
+	                              .WithKey({{"name",AttributeValue(encodeGroupName(groupName))},
+	                                        {"sortKey",AttributeValue(encodeGroupName(groupName))}}));
 	if(!outcome.IsSuccess()){
 		auto err=outcome.GetError();
 		log_error("Failed to fetch Group record: " << err.GetMessage());
@@ -1166,6 +1204,18 @@ std::string PersistentStore::getStatistics() const{
 	os << "Database queries: " << databaseQueries.load() << "\n";
 	os << "Database scans: " << databaseScans.load() << "\n";
 	return os.str();
+}
+
+std::string PersistentStore::encodeGroupName(std::string name){
+	if(name.empty())
+		return ".";
+	return name;
+}
+
+std::string PersistentStore::decodeGroupName(std::string name){
+	if(name==".")
+		return "";
+	return name;
 }
 
 const User authenticateUser(PersistentStore& store, const char* token){

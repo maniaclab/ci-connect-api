@@ -163,6 +163,15 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 		log_error("Failed to create user account");
 		return crow::response(500,generateError("User account creation failed"));
 	}
+	
+	GroupMembership baseMembership;
+	baseMembership.userID=targetUser.id;
+	baseMembership.groupName=""; //the root group
+	baseMembership.state=GroupMembership::Active;
+	baseMembership.stateSetBy=store.getRootUser().id;
+	baseMembership.valid=true;
+	if(!store.addUserToGroup(baseMembership))
+		log_error("Failed to add new user to root group");
 
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();

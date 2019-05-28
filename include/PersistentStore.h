@@ -230,6 +230,8 @@ public:
 	///Return human-readable performance statistics
 	std::string getStatistics() const;
 	
+	const User& getRootUser() const{ return rootUser; }
+	
 private:
 	///Database interface object
 	Aws::DynamoDB::DynamoDBClient dbClient;
@@ -237,6 +239,8 @@ private:
 	const std::string userTableName;
 	///Name of the groups table in the database
 	const std::string groupTableName;
+	
+	User rootUser;
 	
 	///duration for which cached user records should remain valid
 	const std::chrono::seconds userCacheValidity;
@@ -255,7 +259,7 @@ private:
 	///they do not
 	void InitializeTables(std::string bootstrapUserFile);
 	
-	void InitializeUserTable(std::string bootstrapUserFile);
+	void InitializeUserTable();
 	void InitializeGroupTable();
 	
 	///Ensure that a string is a group ID, rather than a group name. 
@@ -264,6 +268,11 @@ private:
 	///\return true if the ID has been successfully normalized, false if it 
 	///        could not be because it was neither a valid group ID nor name. 
 	bool normalizeGroupID(std::string& groupID);
+	
+	///Ensure that a group name is ready to store in dynamo
+	std::string encodeGroupName(std::string name);
+	///Turn a group name suitable for dynamo back to normal
+	std::string decodeGroupName(std::string name);
 	
 	std::atomic<size_t> cacheHits, databaseQueries, databaseScans;
 };
