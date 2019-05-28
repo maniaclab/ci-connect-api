@@ -130,7 +130,7 @@ crow::response listGroups(PersistentStore& store, const crow::request& req){
 		groupResult.AddMember("name", group.name, alloc);
 		groupResult.AddMember("email", group.email, alloc);
 		groupResult.AddMember("phone", group.phone, alloc);
-		groupResult.AddMember("filed_of_science", group.scienceField, alloc);
+		groupResult.AddMember("field_of_science", group.scienceField, alloc);
 		groupResult.AddMember("description", group.description, alloc);
 		resultItems.PushBack(groupResult, alloc);
 	}
@@ -463,6 +463,30 @@ crow::response getSubgroups(PersistentStore& store, const crow::request& req, st
 		return crow::response(403,generateError("Not authorized"));
 	
 	groupName=normalizeGroupName(groupName);
+	Group parentGroup = store.getGroup(groupName);
+	if(!parentGroup)
+		return crow::response(404,generateError("Group not found"));
+	
+	std::string filterPrefix=groupName+".";
+	std::vector<Group> allGroups=store.listGroups();
 
-	return crow::response(500,generateError("Not implemented"));
+	rapidjson::Document result(rapidjson::kObjectType);
+	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
+	
+	result.AddMember("apiVersion", "v1alpha3", alloc);
+	rapidjson::Value resultItems(rapidjson::kArrayType);
+	for (const Group& group : allGroups){
+		if(group.name.find(filterPrefix)!=0)
+			continue;
+		rapidjson::Value groupResult(rapidjson::kObjectType);
+		groupResult.AddMember("name", group.name, alloc);
+		groupResult.AddMember("email", group.email, alloc);
+		groupResult.AddMember("phone", group.phone, alloc);
+		groupResult.AddMember("field_of_science", group.scienceField, alloc);
+		groupResult.AddMember("description", group.description, alloc);
+		resultItems.PushBack(groupResult, alloc);
+	}
+	result.AddMember("groups", resultItems, alloc);
+	
+	return crow::response(to_string(result));
 }
