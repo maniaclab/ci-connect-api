@@ -316,7 +316,7 @@ int main(int argc, char* argv[]){
 	CROW_ROUTE(server, "/v1alpha1/users/<string>/groups/<string>").methods("GET"_method)(
 	  [&](const crow::request& req, const std::string& userID, const std::string& groupID){ return getGroupMemberStatus(store,req,userID,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/users/<string>/groups/<string>").methods("PUT"_method)(
-	  [&](const crow::request& req, const std::string& uID, const std::string groupID){ return addUserToGroup(store,req,uID,groupID); });
+	  [&](const crow::request& req, const std::string& uID, const std::string groupID){ return setUserStatusInGroup(store,req,uID,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/users/<string>/groups/<string>").methods("DELETE"_method)(
 	  [&](const crow::request& req, const std::string& uID, const std::string groupID){ return removeUserFromGroup(store,req,uID,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/users/<string>/replace_token").methods("GET"_method)(
@@ -338,7 +338,7 @@ int main(int argc, char* argv[]){
 	CROW_ROUTE(server, "/v1alpha1/groups/<string>/members/<string>").methods("GET"_method)(
 	  [&](const crow::request& req, const std::string& groupID, const std::string& userID){ return getGroupMemberStatus(store,req,userID,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/groups/<string>/members/<string>").methods("PUT"_method)(
-	  [&](const crow::request& req, const std::string groupID, const std::string& uID){ return addUserToGroup(store,req,uID,groupID); });
+	  [&](const crow::request& req, const std::string groupID, const std::string& uID){ return setUserStatusInGroup(store,req,uID,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/groups/<string>/members/<string>").methods("DELETE"_method)(
 	  [&](const crow::request& req, const std::string groupID, const std::string& uID){ return removeUserFromGroup(store,req,uID,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/groups/<string>/subgroups").methods("GET"_method)(

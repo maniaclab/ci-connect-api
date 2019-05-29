@@ -2,6 +2,7 @@
 
 #include "Logging.h"
 #include "ServerUtilities.h"
+#include "GroupCommands.h"
 
 crow::response listUsers(PersistentStore& store, const crow::request& req){
 	const User user=authenticateUser(store, req.url_params.get("token"));
@@ -170,7 +171,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	baseMembership.state=GroupMembership::Active;
 	baseMembership.stateSetBy=store.getRootUser().id;
 	baseMembership.valid=true;
-	if(!store.addUserToGroup(baseMembership))
+	if(!store.setUserStatusInGroup(baseMembership))
 		log_error("Failed to add new user to root group");
 
 	rapidjson::Document result(rapidjson::kObjectType);
@@ -377,10 +378,27 @@ crow::response listUserGroups(PersistentStore& store, const crow::request& req, 
 	return crow::response(to_string(result));
 }
 
-crow::response addUserToGroup(PersistentStore& store, const crow::request& req, 
-						   const std::string uID, const std::string& groupID){
+namespace{
+	///\return the name of most closely enclosing group of which the user is an admin
+	std::string adminInAnyEnclosingGroup(PersistentStore& store, const std::string& userID, std::string groupName){
+		while(!groupName.empty()){
+			auto sepPos=groupName.rfind('.');
+			if(sepPos==std::string::npos)
+				return ""; //no farther up to walk
+			groupName=groupName.substr(0,sepPos);
+			if(groupName.empty())
+				return "";
+			if(store.userStatusInGroup(userID,groupName).state==GroupMembership::Admin)
+				return groupName;
+		}
+		return "";
+	}
+}
+
+crow::response setUserStatusInGroup(PersistentStore& store, const crow::request& req, 
+						   const std::string& uID, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to add " << uID << " to " << groupID);
+	log_info(user << " requested to add " << uID << " to " << groupName);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -388,17 +406,86 @@ crow::response addUserToGroup(PersistentStore& store, const crow::request& req,
 	if(!targetUser)
 		return crow::response(404,generateError("User not found"));
 	
-	Group group=store.getGroup(groupID);
+	groupName=normalizeGroupName(groupName);
+	Group group=store.getGroup(groupName);
 	if(!group)
 		return(crow::response(404,generateError("Group not found")));
+		
+	rapidjson::Document body;
+	try{
+		body.Parse(req.body.c_str());
+	}catch(std::runtime_error& err){
+		return crow::response(400,generateError("Invalid JSON in request body"));
+	}
+	if(body.IsNull())
+		return crow::response(400,generateError("Invalid JSON in request body"));
+	if(!body.HasMember("group_membership"))
+		return crow::response(400,generateError("Missing group_membership in request"));
+	if(!body["group_membership"].IsObject())
+		return crow::response(400,generateError("Incorrect type for group_membership"));
 	
-	//Only allow admins and members of the Group to add other users to it
-	if(!user.superuser && !store.userStatusInGroup(user.id,groupID).isMember())
-		return crow::response(403,generateError("Not authorized"));
+	GroupMembership membership;
+	membership.userID=targetUser.id;
+	membership.groupName=group.name;
+	membership.stateSetBy=user.id;
 	
-	log_info("Adding " << targetUser << " to " << groupID);
-	//bool success=store.addUserToGroup(uID,groupID);
-	bool success=false;
+	if(body["group_membership"].HasMember("state")){
+		if(!body["group_membership"]["state"].IsString())
+			return crow::response(400,generateError("Incorrect type for membership state"));
+		membership.state=GroupMembership::from_string(body["group_membership"]["state"].GetString());
+	}
+	
+	auto currentStatus=store.userStatusInGroup(targetUser.id,group.name);
+	if(membership.state==currentStatus.state) //no-op
+		return(crow::response(200));
+	bool selfRequest=(user==targetUser);
+	bool requesterIsGroupAdmin=(store.userStatusInGroup(user.id,groupName).state==GroupMembership::Admin);
+	bool requesterIsEnclosingGroupAdmin=false;
+	std::string adminGroup;
+	if(requesterIsGroupAdmin)
+		adminGroup=groupName;
+	else{
+		adminGroup=adminInAnyEnclosingGroup(store,user.id,group.name);
+		if(!adminGroup.empty())
+			requesterIsEnclosingGroupAdmin=true;
+	}
+	
+	//Figure out whether the requested transition is allowed
+	switch(membership.state){
+		case GroupMembership::NonMember:
+			return crow::response(400,generateError("Only status cannot be set to non-member"));
+		case GroupMembership::Pending:
+			if(currentStatus.state!=GroupMembership::NonMember)
+				return crow::response(400,generateError("Only non-members can be placed in pending membership status"));
+			if(!user.superuser && !requesterIsGroupAdmin && !requesterIsEnclosingGroupAdmin)
+				return crow::response(403,generateError("Not authorized"));
+			break; //allowed
+		case GroupMembership::Active: //fallthrough
+		case GroupMembership::Admin:
+			if(currentStatus.state==GroupMembership::Disabled){
+				if(!user.superuser && !requesterIsGroupAdmin)
+					return crow::response(403,generateError("Not authorized"));
+				break; //allowed
+			}
+			else{
+				if(!user.superuser && !requesterIsGroupAdmin)
+					return crow::response(403,generateError("Not authorized"));
+				break; //allowed
+			}
+		case GroupMembership::Disabled:
+			if(currentStatus.state==GroupMembership::NonMember ||
+			   currentStatus.state==GroupMembership::Pending)
+				return crow::response(400,generateError("Only members can be placed in disabled membership status"));
+			if(!user.superuser && !requesterIsGroupAdmin && !requesterIsEnclosingGroupAdmin)
+				return crow::response(403,generateError("Not authorized"));
+			membership.stateSetBy=adminGroup;
+			break; //allowed
+	}
+	
+	log_info("Setting " << targetUser << " status in " << groupName << " to " << GroupMembership::to_string(membership.state));
+	
+	membership.valid=true;
+	bool success=store.setUserStatusInGroup(membership);
 	
 	if(!success)
 		return crow::response(500,generateError("User addition to Group failed"));
@@ -406,7 +493,7 @@ crow::response addUserToGroup(PersistentStore& store, const crow::request& req,
 }
 
 crow::response removeUserFromGroup(PersistentStore& store, const crow::request& req, 
-								const std::string uID, const std::string& groupID){
+								   const std::string& uID, std::string groupID){
 	const User user=authenticateUser(store, req.url_params.get("token"));
 	log_info(user << " requested to remove " << uID << " from " << groupID);
 	if(!user)
@@ -416,8 +503,10 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 	if(!targetUser)
 		return crow::response(404,generateError("User not found"));
 	
-	//Only allow admins and members of the Group to remove user from it
-	if(!user.superuser && !store.userStatusInGroup(user.id,groupID).isMember())
+	//Only allow superusers and admins of the Group to remove user from it
+	if(!user.superuser && 
+	   store.userStatusInGroup(user.id,groupID).state!=GroupMembership::Admin &&
+	   adminInAnyEnclosingGroup(store,user.id,groupID).empty())
 		return crow::response(403,generateError("Not authorized"));
 	
 	log_info("Removing " << targetUser << " from " << groupID);

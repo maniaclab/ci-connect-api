@@ -160,25 +160,27 @@ version: v1alpha1
           description: Change a user's membership status in a group
           # Allowed state transitions and required permissions
           #
-          #                  D
-          #            P     i
-          #            e A   s
-          #            n c A a
-          #            d t d b
-          #            i i m l
-          #            n v i e
-          #            g e n d
-          #          +---------
-          #  Pending | - g g x
-          #   Active | x - g G
-          #    Admin | x g - G
-          # Disabled | x s s -
+          #                   D
+          #             P     i
+          #             e A   s
+          #             n c A a
+          #             d t d b
+          #             i i m l
+          #             n v i e
+          #             g e n d
+          #           +---------
+          # Nonmember | s g g x
+          #   Pending | - g g x
+          #    Active | x - g G
+          #     Admin | x g - G
+          #  Disabled | x p p -
           #
           # -: No-op
           # x: Forbidden
+          # s: Self, group admin, or enclosing group admin
           # g: Group admin
           # G: Group or enclosing group admin
-          # s: Admin of whichever group set disabled status
+          # p: Admin of whichever group set disabled status
           queryParameters:
             token:
               displayName: Access Token
@@ -432,25 +434,27 @@ version: v1alpha1
           description: Change a user's membership status in a group
           # Allowed state transitions and required permissions
           #
-          #                  D
-          #            P     i
-          #            e A   s
-          #            n c A a
-          #            d t d b
-          #            i i m l
-          #            n v i e
-          #            g e n d
-          #          +---------
-          #  Pending | - g g x
-          #   Active | x - g G
-          #    Admin | x g - G
-          # Disabled | x s s -
+          #                   D
+          #             P     i
+          #             e A   s
+          #             n c A a
+          #             d t d b
+          #             i i m l
+          #             n v i e
+          #             g e n d
+          #           +---------
+          # Nonmember | s g g x
+          #   Pending | - g g x
+          #    Active | x - g G
+          #     Admin | x g - G
+          #  Disabled | x p p -
           #
           # -: No-op
           # x: Forbidden
+          # s: Self, group admin, or enclosing group admin
           # g: Group admin
           # G: Group or enclosing group admin
-          # s: Admin of whichever group set disabled status
+          # p: Admin of whichever group set disabled status
           queryParameters:
             token:
               displayName: Access Token

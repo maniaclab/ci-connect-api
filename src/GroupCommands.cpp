@@ -94,15 +94,15 @@ namespace{
 		}
 		return "";
 	}
+}
 	
-	std::string normalizeGroupName(std::string name, const std::string& enclosingGroup=""){
-		if(name.empty()) //empty==root group in normal form already
-			return name;
-		if(name[0]=='.') //leading dot is normal form for all non-root groups
-			return name;
-		//otherwise treat as a relative name
-		return enclosingGroup+"."+name;
-	}
+std::string normalizeGroupName(std::string name, const std::string& enclosingGroup){
+	if(name.empty()) //empty==root group in normal form already
+		return name;
+	if(name[0]=='.') //leading dot is normal form for all non-root groups
+		return name;
+	//otherwise treat as a relative name
+	return enclosingGroup+"."+name;
 }
 
 crow::response listGroups(PersistentStore& store, const crow::request& req){
@@ -247,7 +247,7 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	initialAdmin.state=GroupMembership::Admin;
 	initialAdmin.stateSetBy=user.id;
 	initialAdmin.valid=true;
-	bool added=store.addUserToGroup(initialAdmin);
+	bool added=store.setUserStatusInGroup(initialAdmin);
 	if(!added){
 		//TODO: possible problem: If we get here, we may end up with a valid group
 		//but with no members and not return its ID either

@@ -27,4 +27,6 @@ crow::response getGroupMemberStatus(PersistentStore& store, const crow::request&
 
 crow::response getSubgroups(PersistentStore& store, const crow::request& req, std::string groupName);
 
+std::string normalizeGroupName(std::string name, const std::string& enclosingGroup="");
+
 #endif //SLATE_GroupCOMMANDS_H

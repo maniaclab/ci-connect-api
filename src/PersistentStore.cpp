@@ -363,7 +363,7 @@ void PersistentStore::InitializeGroupTable(){
 				rootOwnership.state=GroupMembership::Admin;
 				rootOwnership.stateSetBy=rootUser.id;
 				rootOwnership.valid=true;
-				if(!addUserToGroup(rootOwnership))
+				if(!setUserStatusInGroup(rootOwnership))
 					log_fatal("Failed to inject root user into root group");
 			}
 			catch(...){
@@ -670,6 +670,7 @@ bool PersistentStore::removeUser(const std::string& id){
 			//record in the other cache
 			userByTokenCache.erase(record.record.token);
 			userByGlobusIDCache.erase(record.record.globusID);
+			groupMembershipByUserCache.erase(id);
 		}
 		userCache.erase(id);
 	}
@@ -750,60 +751,7 @@ std::vector<User> PersistentStore::listUsers(){
 	return collected;
 }
 
-/*std::vector<GroupMembership> PersistentStore::listUsersByGroup(const std::string& group){
-	//first check if list of users is cached
-	CacheRecord<std::string> record;
-	auto cached = groupMembershipByGroupCache.find(group);
-	if (cached.second > std::chrono::steady_clock::now()) {
-		auto records = cached.first;
-		std::vector<GroupMembership> members;
-		for (auto record : records) {
-			cacheHits++;
-			members.push_back(record);
-		}
-		return members;
-	}
-
-	std::vector<GroupMembership> members;
-	using AV=Aws::DynamoDB::Model::AttributeValue;
-	databaseQueries++;
-
-	Aws::DynamoDB::Model::QueryOutcome outcome;
-	outcome=dbClient.Query(Aws::DynamoDB::Model::QueryRequest()
-			       .WithTableName(userTableName)
-			       .WithIndexName("ByGroup")
-			       .WithKeyConditionExpression("#groupID = :group_val")
-			       .WithExpressionAttributeNames({{"#groupID", "groupName"}})
-			       .WithExpressionAttributeValues({{":group_val", AV(group)}})
-			       );
-	if(!outcome.IsSuccess()){
-		auto err=outcome.GetError();
-		log_error("Failed to list Users by Group: " << err.GetMessage());
-		return members;
-	}
-
-	const auto& queryResult=outcome.GetResult();
-	if(queryResult.GetCount()==0)
-		return members;
-
-	for(const auto& item : queryResult.GetItems()){
-		GroupMembership member;
-		member.userID=findOrThrow(item, "ID", "group membership record missing user ID attribute").GetS();
-		member.groupName=group;
-		member.state=GroupMembership::from_string(findOrThrow(item, "state", "group membership record missing state attribute").GetS());
-		
-		members.push_back(member);
-
-		//update caches
-		CacheRecord<GroupMembership> record(member,userCacheValidity);
-		groupMembershipByUserCache.insert_or_assign(member.userID,record);
-		groupMembershipByGroupCache.insert_or_assign(member.groupName,record);
-	}
-	
-	return users;	
-}*/
-
-bool PersistentStore::addUserToGroup(const GroupMembership& membership){
+bool PersistentStore::setUserStatusInGroup(const GroupMembership& membership){
 	using Aws::DynamoDB::Model::AttributeValue;
 	auto request=Aws::DynamoDB::Model::PutItemRequest()
 	  .WithTableName(userTableName)
@@ -823,26 +771,34 @@ bool PersistentStore::addUserToGroup(const GroupMembership& membership){
 	
 	//update cache
 	CacheRecord<GroupMembership> record(membership,userCacheValidity);
+	groupMembershipCache.insert_or_assign(membership.userID+":"+membership.groupName,record);
 	groupMembershipByUserCache.insert_or_assign(membership.userID,record);
 	groupMembershipByGroupCache.insert_or_assign(membership.groupName,record);
 	
 	return true;
 }
 
-
-bool PersistentStore::updateUserStatusInGroup(const GroupMembership& membership){
-	//TODO: implement
-	throw std::runtime_error("not implemented");
-}
-
 bool PersistentStore::removeUserFromGroup(const std::string& uID, std::string groupName){
-	//remove any cache entry
-	/*userByGroupCache.erase(groupName,CacheRecord<std::string>(uID));
+	//write non-member status to all caches
+	GroupMembership membership;
+	membership.valid=false;
+	membership.userID=uID;
+	membership.groupName=groupName;
+	membership.state=GroupMembership::NonMember;
+	CacheRecord<GroupMembership> record(membership,userCacheValidity);
+	groupMembershipCache.insert_or_assign(uID+":"+groupName,record);
+	groupMembershipByUserCache.insert_or_assign(uID,record);
+	groupMembershipByGroupCache.insert_or_assign(groupName,record);
 
-	CacheRecord<Group> record;
-	bool cached=groupCache.find(groupName,record);
-	if (cached)
-		groupByUserCache.erase(uID, record);
+	{
+		CacheRecord<GroupMembership> record;
+		bool cached=groupMembershipCache.find(groupName,record);
+		if (cached){
+			groupMembershipByUserCache.erase(uID,record);
+			groupMembershipByGroupCache.erase(groupName,record);
+			groupMembershipCache.erase(uID);
+		}
+	}
 	
 	using Aws::DynamoDB::Model::AttributeValue;
 	auto outcome=dbClient.DeleteItem(Aws::DynamoDB::Model::DeleteItemRequest()
@@ -854,8 +810,57 @@ bool PersistentStore::removeUserFromGroup(const std::string& uID, std::string gr
 		log_error("Failed to delete user Group membership record: " << err.GetMessage());
 		return false;
 	}
-	return true;*/
-	throw std::runtime_error("not implemented");
+	return true;
+}
+
+GroupMembership PersistentStore::userStatusInGroup(const std::string& uID, std::string groupName){
+	//first see if we have this cached
+	{
+		CacheRecord<GroupMembership> record;
+		if(groupMembershipCache.find(uID+":"+groupName,record)){
+			//we have a cached record; is it still valid?
+			if(record){ //it is, just return it
+				cacheHits++;
+				return record;
+			}
+		}
+	}
+	//need to query the database
+	databaseQueries++;
+	log_info("Querying database for user " << uID << " membership in Group " << groupName);
+	using Aws::DynamoDB::Model::AttributeValue;
+	auto outcome=dbClient.GetItem(Aws::DynamoDB::Model::GetItemRequest()
+								  .WithTableName(userTableName)
+								  .WithKey({{"ID",AttributeValue(uID)},
+	                                        {"sortKey",AttributeValue(uID+":"+encodeGroupName(groupName))}}));
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to fetch user Group membership record: " << err.GetMessage());
+		return GroupMembership{};
+	}
+	const auto& item=outcome.GetResult().GetItem();
+	GroupMembership membership;
+	if(item.empty()){ //no match found, make non-member record
+		membership.valid=false;
+		membership.userID=uID;
+		membership.groupName=groupName;
+		membership.state=GroupMembership::NonMember;
+	}
+	else{
+		membership.valid=true;
+		membership.userID=uID;
+		membership.groupName=groupName;
+		membership.state=GroupMembership::from_string(findOrThrow(item,"state","membership record missing state attribute").GetS());
+		membership.stateSetBy=findOrThrow(item,"stateSetBy","membership record missing state set by attribute").GetS();
+	}
+	
+	//update cache
+	CacheRecord<GroupMembership> record(membership,userCacheValidity);
+	groupMembershipCache.insert_or_assign(uID+":"+groupName,record);
+	groupMembershipByUserCache.insert_or_assign(uID,record);
+	groupMembershipByGroupCache.insert_or_assign(groupName,record);
+	
+	return membership;
 }
 
 std::vector<GroupMembership> PersistentStore::getUserGroupMemberships(const std::string& uID){
@@ -904,61 +909,15 @@ std::vector<GroupMembership> PersistentStore::getUserGroupMemberships(const std:
 			membership.stateSetBy=findOrThrow(item,"stateSetBy","membership record missing state set by attribute").GetS();
 			membership.valid=true;
 			memberships.push_back(membership);
-			//TODO: update caches
+			
+			CacheRecord<GroupMembership> record(membership,userCacheValidity);
+			groupMembershipCache.insert_or_assign(uID+":"+membership.groupName,record);
+			groupMembershipByUserCache.insert_or_assign(uID,record);
+			groupMembershipByGroupCache.insert_or_assign(membership.groupName,record);
 		}
 	}
 	
 	return memberships;
-}
-
-GroupMembership PersistentStore::userStatusInGroup(const std::string& uID, std::string groupName){
-	//first see if we have this cached
-	//TODO: query cache appropriately
-	/*{
-		CacheRecord<std::string> record(uID);
-		if(userByGroupCache.find(groupName,record)){
-			//we have a cached record; is it still valid?
-			if(record){ //it is, just return it
-				cacheHits++;
-				return record;
-			}
-		}
-	}*/
-	//need to query the database
-	databaseQueries++;
-	log_info("Querying database for user " << uID << " membership in Group " << groupName);
-	using Aws::DynamoDB::Model::AttributeValue;
-	auto outcome=dbClient.GetItem(Aws::DynamoDB::Model::GetItemRequest()
-								  .WithTableName(userTableName)
-								  .WithKey({{"ID",AttributeValue(uID)},
-	                                        {"sortKey",AttributeValue(uID+":"+encodeGroupName(groupName))}}));
-	if(!outcome.IsSuccess()){
-		auto err=outcome.GetError();
-		log_error("Failed to fetch user Group membership record: " << err.GetMessage());
-		return GroupMembership{};
-	}
-	const auto& item=outcome.GetResult().GetItem();
-	GroupMembership membership;
-	if(item.empty()){ //no match found, make non-member record
-		membership.valid=false;
-		membership.userID=uID;
-		membership.groupName=groupName;
-		membership.state=GroupMembership::NonMember;
-	}
-	else{
-		membership.valid=true;
-		membership.userID=uID;
-		membership.groupName=groupName;
-		membership.state=GroupMembership::from_string(findOrThrow(item,"state","membership record missing state attribute").GetS());
-		membership.stateSetBy=findOrThrow(item,"stateSetBy","membership record missing state set by attribute").GetS();
-	}
-	
-	//update cache
-	CacheRecord<GroupMembership> record(membership,userCacheValidity);
-	groupMembershipByUserCache.insert_or_assign(uID,record);
-	groupMembershipByGroupCache.insert_or_assign(groupName,record);
-	
-	return membership;
 }
 
 //----
@@ -1091,7 +1050,10 @@ std::vector<GroupMembership> PersistentStore::getMembersOfGroup(const std::strin
 		membership.valid=true;
 		memberships.push_back(membership);
 		
-		//TODO: update caches
+		CacheRecord<GroupMembership> record(membership,userCacheValidity);
+		groupMembershipCache.insert_or_assign(membership.userID+":"+groupName,record);
+		groupMembershipByUserCache.insert_or_assign(membership.userID,record);
+		groupMembershipByGroupCache.insert_or_assign(groupName,record);
 	}
 	
 	return memberships;

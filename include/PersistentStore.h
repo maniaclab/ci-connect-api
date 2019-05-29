@@ -167,13 +167,12 @@ public:
 	///\return all users from the given group, but with only IDs, names, and email addresses
 	//std::vector<GroupMembership> listUsersByGroup(const std::string& group);
 	
-	///Mark a user as a member of a group
+	///Set a user's status within a group. 
+	///Should not be used for non-member status, instead use removeUserFromGroup
 	///\param uID the ID of the user to add
 	///\param groupID the ID of the group to which to add the user
 	///\return wther the addition operation succeeded
-	bool addUserToGroup(const GroupMembership& membership);
-	
-	bool updateUserStatusInGroup(const GroupMembership& membership);
+	bool setUserStatusInGroup(const GroupMembership& membership);
 	
 	///Remove a user from a group
 	///\param uID the ID of the user to remove
@@ -248,7 +247,11 @@ private:
 	cuckoohash_map<std::string,CacheRecord<User>> userCache;
 	cuckoohash_map<std::string,CacheRecord<User>> userByTokenCache;
 	cuckoohash_map<std::string,CacheRecord<User>> userByGlobusIDCache;
+	///This cache holds individual membership records, keyed by userID:groupName
+	cuckoohash_map<std::string,CacheRecord<GroupMembership>> groupMembershipCache;
+	///This cache holds all memberships associated with each user
 	concurrent_multimap<std::string,CacheRecord<GroupMembership>> groupMembershipByUserCache;
+	///This cache holds all memberships associated with each group
 	concurrent_multimap<std::string,CacheRecord<GroupMembership>> groupMembershipByGroupCache;
 	///duration for which cached group records should remain valid
 	const std::chrono::seconds groupCacheValidity;
