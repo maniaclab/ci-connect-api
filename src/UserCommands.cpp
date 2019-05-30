@@ -301,9 +301,10 @@ crow::response updateUser(PersistentStore& store, const crow::request& req, cons
 	if(body["metadata"].HasMember("superuser")){
 		if(!body["metadata"]["superuser"].IsBool())
 			return crow::response(400,generateError("Incorrect type for user superuser flag"));
-		if(!user.superuser) //only admins can alter admin rights
+		if(!user.superuser && body["metadata"]["superuser"].GetBool()!=targetUser.superuser) //only admins can alter admin rights
 			return crow::response(403,generateError("Not authorized"));
-		updatedUser.superuser=body["metadata"]["superuser"].GetBool();
+		if(user.superuser)
+			updatedUser.superuser=body["metadata"]["superuser"].GetBool();
 	}
 	
 	log_info("Updating " << targetUser << " info");
