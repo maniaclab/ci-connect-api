@@ -407,7 +407,7 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 	if(!targetUser)
 		return crow::response(404,generateError("User not found"));
 	
-	groupName=normalizeGroupName(groupName);
+	groupName=canonicalizeGroupName(groupName);
 	Group group=store.getGroup(groupName);
 	if(!group)
 		return(crow::response(404,generateError("Group not found")));

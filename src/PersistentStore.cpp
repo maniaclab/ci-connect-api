@@ -190,7 +190,7 @@ void PersistentStore::InitializeUserTable(){
 		                       .WithKeyType(KeyType::HASH)})
 		       .WithProjection(Projection()
 		                       .WithProjectionType(ProjectionType::INCLUDE)
-		                       .WithNonKeyAttributes({"ID","name","email","phone","institution","token","sshKey","superuser","serviceAccount"}))
+		                       .WithNonKeyAttributes({"ID","token"}))
 		       .WithProvisionedThroughput(ProvisionedThroughput()
 		                                  .WithReadCapacityUnits(1)
 		                                  .WithWriteCapacityUnits(1));
@@ -203,7 +203,7 @@ void PersistentStore::InitializeUserTable(){
 		                       .WithKeyType(KeyType::HASH)})
 		       .WithProjection(Projection()
 		                       .WithProjectionType(ProjectionType::INCLUDE)
-		                       .WithNonKeyAttributes({"ID","state"}))
+		                       .WithNonKeyAttributes({"ID","state","stateSetBy"}))
 		       .WithProvisionedThroughput(ProvisionedThroughput()
 		                                  .WithReadCapacityUnits(1)
 		                                  .WithWriteCapacityUnits(1));
@@ -348,7 +348,7 @@ void PersistentStore::InitializeGroupTable(){
 		{
 			try{
 				Group rootGroup;
-				rootGroup.name=".";
+				rootGroup.name="root";
 				rootGroup.email="none";
 				rootGroup.phone="none";
 				rootGroup.scienceField="ResourceProvider";
@@ -599,20 +599,14 @@ User PersistentStore::findUserByGlobusID(const std::string& globusID){
 	User user;
 	user.valid=true;
 	user.id=findOrThrow(item,"ID","user record missing ID attribute").GetS();
-	user.name=findOrThrow(item,"name","user record missing name attribute").GetS();
-	user.email=findOrThrow(item,"email","user record missing email attribute").GetS();
-	user.phone=findOrDefault(item,"phone",missingString).GetS();
-	user.institution=findOrDefault(item,"institution",missingString).GetS();
 	user.token=findOrThrow(item,"token","user record missing token attribute").GetS();
 	user.globusID=globusID;
-	user.sshKey=findOrThrow(item,"sshKey","user record missing sshKey attribute").GetS();
-	user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
-	user.serviceAccount=findOrThrow(item,"serviceAccount","user record missing serviceAccount attribute").GetBool();
 	
 	//update caches
 	CacheRecord<User> record(user,userCacheValidity);
-	userCache.insert_or_assign(user.id,record);
-	userByTokenCache.insert_or_assign(user.token,record);
+	//We don't have enough information to populate the other caches. :(
+	//userCache.insert_or_assign(user.id,record);
+	//userByTokenCache.insert_or_assign(user.token,record);
 	userByGlobusIDCache.insert_or_assign(user.globusID,record);
 	
 	return user;
@@ -757,8 +751,8 @@ bool PersistentStore::setUserStatusInGroup(const GroupMembership& membership){
 	  .WithTableName(userTableName)
 	  .WithItem({
 		{"ID",AttributeValue(membership.userID)},
-		{"sortKey",AttributeValue(membership.userID+":"+encodeGroupName(membership.groupName))},
-		{"groupName",AttributeValue(encodeGroupName(membership.groupName))},
+		{"sortKey",AttributeValue(membership.userID+":"+membership.groupName)},
+		{"groupName",AttributeValue(membership.groupName)},
 		{"state",AttributeValue(GroupMembership::to_string(membership.state))},
 		{"stateSetBy",AttributeValue(membership.stateSetBy)}
 	});
@@ -804,7 +798,7 @@ bool PersistentStore::removeUserFromGroup(const std::string& uID, std::string gr
 	auto outcome=dbClient.DeleteItem(Aws::DynamoDB::Model::DeleteItemRequest()
 								     .WithTableName(userTableName)
 								     .WithKey({{"ID",AttributeValue(uID)},
-	                                           {"sortKey",AttributeValue(uID+":"+encodeGroupName(membership.groupName))}}));
+	                                           {"sortKey",AttributeValue(uID+":"+membership.groupName)}}));
 	if(!outcome.IsSuccess()){
 		auto err=outcome.GetError();
 		log_error("Failed to delete user Group membership record: " << err.GetMessage());
@@ -832,7 +826,7 @@ GroupMembership PersistentStore::userStatusInGroup(const std::string& uID, std::
 	auto outcome=dbClient.GetItem(Aws::DynamoDB::Model::GetItemRequest()
 								  .WithTableName(userTableName)
 								  .WithKey({{"ID",AttributeValue(uID)},
-	                                        {"sortKey",AttributeValue(uID+":"+encodeGroupName(groupName))}}));
+	                                        {"sortKey",AttributeValue(uID+":"+groupName)}}));
 	if(!outcome.IsSuccess()){
 		auto err=outcome.GetError();
 		log_error("Failed to fetch user Group membership record: " << err.GetMessage());
@@ -904,7 +898,7 @@ std::vector<GroupMembership> PersistentStore::getUserGroupMemberships(const std:
 		if(item.count("groupName")){
 			GroupMembership membership;
 			membership.userID=uID;
-			membership.groupName=decodeGroupName(findOrThrow(item,"groupName","membership record missing group name attribute").GetS());
+			membership.groupName=findOrThrow(item,"groupName","membership record missing group name attribute").GetS();
 			membership.state=GroupMembership::from_string(findOrThrow(item,"state","membership record missing state attribute").GetS());
 			membership.stateSetBy=findOrThrow(item,"stateSetBy","membership record missing state set by attribute").GetS();
 			membership.valid=true;
@@ -934,8 +928,8 @@ bool PersistentStore::addGroup(const Group& group){
 	using AV=Aws::DynamoDB::Model::AttributeValue;
 	auto outcome=dbClient.PutItem(Aws::DynamoDB::Model::PutItemRequest()
 	                              .WithTableName(groupTableName)
-	                              .WithItem({{"name",AV(encodeGroupName(group.name))},
-	                                         {"sortKey",AV(encodeGroupName(group.name))},
+	                              .WithItem({{"name",AV(group.name)},
+	                                         {"sortKey",AV(group.name)},
 	                                         {"email",AV(group.email)},
 	                                         {"phone",AV(group.phone)},
 	                                         {"scienceField",AV(group.scienceField)},
@@ -972,8 +966,8 @@ bool PersistentStore::removeGroup(const std::string& groupName){
 	//delete the Group record itself
 	auto outcome=dbClient.DeleteItem(Aws::DynamoDB::Model::DeleteItemRequest()
 								     .WithTableName(groupTableName)
-								     .WithKey({{"ID",AttributeValue(encodeGroupName(groupName))},
-	                                           {"sortKey",AttributeValue(encodeGroupName(groupName))}}));
+								     .WithKey({{"ID",AttributeValue(groupName)},
+	                                           {"sortKey",AttributeValue(groupName)}}));
 	if(!outcome.IsSuccess()){
 		auto err=outcome.GetError();
 		log_error("Failed to delete Group record: " << err.GetMessage());
@@ -987,8 +981,8 @@ bool PersistentStore::updateGroup(const Group& group){
 	using AVU=Aws::DynamoDB::Model::AttributeValueUpdate;
 	auto outcome=dbClient.UpdateItem(Aws::DynamoDB::Model::UpdateItemRequest()
 	                                 .WithTableName(groupTableName)
-	                                 .WithKey({{"name",AV(encodeGroupName(group.name))},
-	                                           {"sortKey",AV(encodeGroupName(group.name))}})
+	                                 .WithKey({{"name",AV(group.name)},
+	                                           {"sortKey",AV(group.name)}})
 	                                 .WithAttributeUpdates({
 	                                            {"email",AVU().WithValue(AV(group.email))},
 	                                            {"phone",AVU().WithValue(AV(group.phone))},
@@ -1031,7 +1025,7 @@ std::vector<GroupMembership> PersistentStore::getMembersOfGroup(const std::strin
 	                            .WithIndexName("ByGroup")
 	                            .WithKeyConditionExpression("#groupName = :id_val")
 	                            .WithExpressionAttributeNames({{"#groupName","groupName"}})
-								.WithExpressionAttributeValues({{":id_val",AttributeValue(encodeGroupName(groupName))}})
+								.WithExpressionAttributeValues({{":id_val",AttributeValue(groupName)}})
 	                            );
 	std::vector<GroupMembership> memberships;
 	if(!outcome.IsSuccess()){
@@ -1101,7 +1095,7 @@ std::vector<Group> PersistentStore::listGroups(){
 		for(const auto& item : result.GetItems()){
 			Group group;
 			group.valid=true;
-			group.name=decodeGroupName(findOrThrow(item,"name","Group record missing name attribute").GetS());
+			group.name=findOrThrow(item,"name","Group record missing name attribute").GetS();
 			group.email=findOrThrow(item,"email","Group record missing email attribute").GetS();
 			group.phone=findOrThrow(item,"phone","Group record missing phone attribute").GetS();
 			group.scienceField=findOrThrow(item,"scienceField","Group record missing field of science attribute").GetS();
@@ -1135,8 +1129,8 @@ Group PersistentStore::getGroup(const std::string& groupName){
 	using Aws::DynamoDB::Model::AttributeValue;
 	auto outcome=dbClient.GetItem(Aws::DynamoDB::Model::GetItemRequest()
 	                              .WithTableName(groupTableName)
-	                              .WithKey({{"name",AttributeValue(encodeGroupName(groupName))},
-	                                        {"sortKey",AttributeValue(encodeGroupName(groupName))}}));
+	                              .WithKey({{"name",AttributeValue(groupName)},
+	                                        {"sortKey",AttributeValue(groupName)}}));
 	if(!outcome.IsSuccess()){
 		auto err=outcome.GetError();
 		log_error("Failed to fetch Group record: " << err.GetMessage());
@@ -1166,18 +1160,6 @@ std::string PersistentStore::getStatistics() const{
 	os << "Database queries: " << databaseQueries.load() << "\n";
 	os << "Database scans: " << databaseScans.load() << "\n";
 	return os.str();
-}
-
-std::string PersistentStore::encodeGroupName(std::string name){
-	if(name.empty())
-		return ".";
-	return name;
-}
-
-std::string PersistentStore::decodeGroupName(std::string name){
-	if(name==".")
-		return "";
-	return name;
 }
 
 const User authenticateUser(PersistentStore& store, const char* token){

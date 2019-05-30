@@ -96,10 +96,10 @@ namespace{
 	}
 }
 	
-std::string normalizeGroupName(std::string name, const std::string& enclosingGroup){
-	if(name.empty()) //empty==root group in normal form already
+std::string canonicalizeGroupName(std::string name, const std::string& enclosingGroup){
+	if(name=="root") //the root group
 		return name;
-	if(name[0]=='.') //leading dot is normal form for all non-root groups
+	if(name.find("root.")==0) //assume anything starting with the root group is in absolute form
 		return name;
 	//otherwise treat as a relative name
 	return enclosingGroup+"."+name;
@@ -145,8 +145,8 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	log_info(user << " requested to create group " << newGroupName << " within " << parentGroupName);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
-	parentGroupName=normalizeGroupName(parentGroupName);
-	newGroupName=normalizeGroupName(newGroupName,parentGroupName);
+	parentGroupName=canonicalizeGroupName(parentGroupName);
+	newGroupName=canonicalizeGroupName(newGroupName,parentGroupName);
 		
 	Group parentGroup=store.getGroup(parentGroupName);
 	if(!parentGroup) //the parent group must exist
@@ -179,16 +179,18 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		return crow::response(400,generateError("Missing Group name in request"));
 	if(!body["metadata"]["name"].IsString())
 		return crow::response(400,generateError("Incorrect type for Group name"));
+	if(canonicalizeGroupName(body["metadata"]["name"].GetString(),parentGroupName)!=newGroupName)
+		return crow::response(400,generateError("Group name in request does not match target URL path"));
 	
 	if(body["metadata"].HasMember("email") && !body["metadata"]["email"].IsString())
 		return crow::response(400,generateError("Incorrect type for Group email"));
 	if(body["metadata"].HasMember("phone") && !body["metadata"]["phone"].IsString())
 		return crow::response(400,generateError("Incorrect type for Group phone"));
 	
-	if(!body["metadata"].HasMember("scienceField"))
-		return crow::response(400,generateError("Missing Group scienceField in request"));
-	if(!body["metadata"]["scienceField"].IsString())
-		return crow::response(400,generateError("Incorrect type for Group scienceField"));
+	if(!body["metadata"].HasMember("field_of_science"))
+		return crow::response(400,generateError("Missing Group field of science in request"));
+	if(!body["metadata"]["field_of_science"].IsString())
+		return crow::response(400,generateError("Incorrect type for Group field of science"));
 		
 	if(body["metadata"].HasMember("description") && !body["metadata"]["description"].IsString())
 		return crow::response(400,generateError("Incorrect type for Group description"));
@@ -196,17 +198,9 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	Group group;
 	
 	//TODO: update name validation
-	group.name=body["metadata"]["name"].GetString();
+	group.name=newGroupName;
 	if(group.name.empty())
 		return crow::response(400,generateError("Group names may not be the empty string"));
-	if(group.name.find_first_not_of("abcdefghijklmnopqrstuvwxzy0123456789-")!=std::string::npos)
-		return crow::response(400,generateError("Group names may only contain [a-z], [0-9] and -"));
-	if(group.name.back()=='-')
-		return crow::response(400,generateError("Group names may not end with a dash"));
-	if(group.name.size()>54)
-		return crow::response(400,generateError("Group names may not be more than 54 characters long"));
-	if(group.name.find(IDGenerator::groupIDPrefix)==0)
-		return crow::response(400,generateError("Group names may not begin with "+IDGenerator::groupIDPrefix));
 	
 	if(body["metadata"].HasMember("email"))
 		group.email=body["metadata"]["email"].GetString();
@@ -223,9 +217,9 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		group.phone=" "; //Dynamo will get upset if a string is empty
 	
 	if(body["metadata"].HasMember("field_of_science"))
-		group.scienceField=normalizeScienceField(body["metadata"]["scienceField"].GetString());
+		group.scienceField=normalizeScienceField(body["metadata"]["field_of_science"].GetString());
 	if(group.scienceField.empty())
-		return crow::response(400,generateError("Unrecognized value for Group scienceField\n"
+		return crow::response(400,generateError("Unrecognized value for Group field of science\n"
 		  "See http://slateci.io/docs/science-fields for a list of accepted values"));
 	
 	if(body["metadata"].HasMember("description"))
@@ -283,7 +277,7 @@ crow::response getGroupInfo(PersistentStore& store, const crow::request& req, st
 		return crow::response(403,generateError("Not authorized"));
 	//Any user in the system may query a Group's information
 	
-	groupName=normalizeGroupName(groupName);
+	groupName=canonicalizeGroupName(groupName);
 	Group group = store.getGroup(groupName);
 	
 	if(!group)
@@ -297,7 +291,7 @@ crow::response getGroupInfo(PersistentStore& store, const crow::request& req, st
 	metadata.AddMember("name", rapidjson::StringRef(group.name.c_str()), alloc);
 	metadata.AddMember("email", rapidjson::StringRef(group.email.c_str()), alloc);
 	metadata.AddMember("phone", rapidjson::StringRef(group.phone.c_str()), alloc);
-	metadata.AddMember("scienceField", rapidjson::StringRef(group.scienceField.c_str()), alloc);
+	metadata.AddMember("field_of_science", rapidjson::StringRef(group.scienceField.c_str()), alloc);
 	metadata.AddMember("description", rapidjson::StringRef(group.description.c_str()), alloc);
 	result.AddMember("kind", "Group", alloc);
 	result.AddMember("metadata", metadata, alloc);
@@ -311,7 +305,7 @@ crow::response updateGroup(PersistentStore& store, const crow::request& req, std
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 		
-	groupName=normalizeGroupName(groupName);
+	groupName=canonicalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
 	if(!user.superuser || store.userStatusInGroup(user.id,groupName).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
@@ -348,12 +342,12 @@ crow::response updateGroup(PersistentStore& store, const crow::request& req, std
 		targetGroup.phone=body["metadata"]["phone"].GetString();
 		doUpdate=true;
 	}
-	if(body["metadata"].HasMember("scienceField")){
-		if(!body["metadata"]["scienceField"].IsString())
-			return crow::response(400,generateError("Incorrect type for scienceField"));	
-		targetGroup.scienceField=normalizeScienceField(body["metadata"]["scienceField"].GetString());
+	if(body["metadata"].HasMember("field_of_science")){
+		if(!body["metadata"]["field_of_science"].IsString())
+			return crow::response(400,generateError("Incorrect type for field of science"));	
+		targetGroup.scienceField=normalizeScienceField(body["metadata"]["field_of_science"].GetString());
 		if(targetGroup.scienceField.empty())
-			return crow::response(400,generateError("Unrecognized value for Group scienceField"));
+			return crow::response(400,generateError("Unrecognized value for Group field of science"));
 		doUpdate=true;
 	}
 	if(body["metadata"].HasMember("description")){
@@ -384,7 +378,7 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, std
 	log_info(user << " requested to delete " << groupName);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
-	groupName=normalizeGroupName(groupName);
+	groupName=canonicalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
 	if(!user.superuser || store.userStatusInGroup(user.id,groupName).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
@@ -409,7 +403,7 @@ crow::response listGroupMembers(PersistentStore& store, const crow::request& req
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
-	groupName=normalizeGroupName(groupName);
+	groupName=canonicalizeGroupName(groupName);
 	Group targetGroup = store.getGroup(groupName);
 	if(!targetGroup)
 		return crow::response(404,generateError("Group not found"));
@@ -440,7 +434,7 @@ crow::response getGroupMemberStatus(PersistentStore& store, const crow::request&
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
-	groupName=normalizeGroupName(groupName);
+	groupName=canonicalizeGroupName(groupName);
 	GroupMembership membership=store.userStatusInGroup(userID, groupName);
 	
 	rapidjson::Document result(rapidjson::kObjectType);
@@ -462,7 +456,7 @@ crow::response getSubgroups(PersistentStore& store, const crow::request& req, st
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
-	groupName=normalizeGroupName(groupName);
+	groupName=canonicalizeGroupName(groupName);
 	Group parentGroup = store.getGroup(groupName);
 	if(!parentGroup)
 		return crow::response(404,generateError("Group not found"));
