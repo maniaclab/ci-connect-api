@@ -289,6 +289,35 @@ version: v1alpha1
         body:
           application/json:
             type: !include ErrorResultSchema.json
+/check_unix_name:
+  get:
+    description: Check whether the sepcified unix name is already in use by a user
+    queryParameters:
+      token:
+        displayName: Access Token
+        type: string
+        description: User's authentication token
+        required: true
+      unix_name:
+        displayName: Unix Name
+        type: string
+        description: Unix user name
+        required: true
+    responses:
+      200:
+        description: Credentials for the relevent user
+        body:
+          application/json: !include CheckUnixNameResultSchema.json
+      403:
+        description: Authentication/authorization error
+        body:
+          application/json:
+            type: !include ErrorResultSchema.json
+      404:
+        description: User not found error
+        body:
+          application/json:
+            type: !include ErrorResultSchema.json
 /groups:
   get:
     description: List all groups

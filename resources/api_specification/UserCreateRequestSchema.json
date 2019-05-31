@@ -14,38 +14,34 @@
       "required": true,
       "properties": {
         "globusID": {
-          "type": "string",
-          "required": true
+          "type": "string"
         },
         "name": {
-          "type": "string",
-          "required": true
+          "type": "string"
         },
         "email": {
-          "type": "string",
-          "required": true
+          "type": "string"
         },
         "phone": {
-          "type": "string",
-          "required": true
+          "type": "string"
         },
         "institution": {
-          "type": "string",
-          "required": true
+          "type": "string"
         },
         "public_key": {
-          "type": "string",
-          "required": true
+          "type": "string"
+        },
+        "unix_name":{
+          "type": "string"
         },
         "superuser": {
-          "type": "boolean",
-          "required": true
+          "type": "boolean"
         },
         "service_account": {
-          "type": "boolean",
-          "required": true
+          "type": "boolean"
         }
-      }
+      },
+      "required": ["globusID","name","email","phone","institution","public_key","unix_name","superuser","service_account"]
     }
   }
 }

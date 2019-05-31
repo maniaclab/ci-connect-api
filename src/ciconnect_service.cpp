@@ -323,6 +323,8 @@ int main(int argc, char* argv[]){
 	  [&](const crow::request& req, const std::string& uID){ return replaceUserToken(store,req,uID); });
 	CROW_ROUTE(server, "/v1alpha1/find_user").methods("GET"_method)(
 	  [&](const crow::request& req){ return findUser(store,req); });
+	CROW_ROUTE(server, "/v1alpha1/check_unix_name").methods("GET"_method)(
+	  [&](const crow::request& req){ return checkUnixName(store,req); });
 	
 	// == Group commands ==
 	CROW_ROUTE(server, "/v1alpha1/groups").methods("GET"_method)(

@@ -193,6 +193,9 @@ public:
 	///\return whether the user is a member of the group
 	GroupMembership userStatusInGroup(const std::string& uID, std::string groupName);
 	
+	///\throws std::runtime_error o database query failure
+	bool unixNameInUse(const std::string& name);
+	
 	//----
 	
 	///Create a record for a new group

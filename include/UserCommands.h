@@ -19,6 +19,7 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 crow::response removeUserFromGroup(PersistentStore& store, const crow::request& req, 
                                    const std::string& uID, std::string groupID);
 crow::response findUser(PersistentStore& store, const crow::request& req);
+crow::response checkUnixName(PersistentStore& store, const crow::request& req);
 crow::response replaceUserToken(PersistentStore& store, const crow::request& req,
                                 const std::string uID);
 

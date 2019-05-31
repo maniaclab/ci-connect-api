@@ -177,7 +177,7 @@ void PersistentStore::InitializeUserTable(){
 		                       .WithKeyType(KeyType::HASH)})
 		       .WithProjection(Projection()
 		                       .WithProjectionType(ProjectionType::INCLUDE)
-		                       .WithNonKeyAttributes({"ID","name","email","phone","institution","globusID","sshKey","superuser","serviceAccount"}))
+		                       .WithNonKeyAttributes({"ID","name","email","phone","institution","globusID","sshKey","unixName","superuser","serviceAccount"}))
 		       .WithProvisionedThroughput(ProvisionedThroughput()
 		                                  .WithReadCapacityUnits(1)
 		                                  .WithWriteCapacityUnits(1));
@@ -208,6 +208,18 @@ void PersistentStore::InitializeUserTable(){
 		                                  .WithReadCapacityUnits(1)
 		                                  .WithWriteCapacityUnits(1));
 	};
+	auto getByUnixNameIndex=[](){
+		return GlobalSecondaryIndex()
+		       .WithIndexName("ByUnixName")
+		       .WithKeySchema({KeySchemaElement()
+		                       .WithAttributeName("unixName")
+		                       .WithKeyType(KeyType::HASH)})
+		       .WithProjection(Projection()
+		                       .WithProjectionType(ProjectionType::KEYS_ONLY))
+		       .WithProvisionedThroughput(ProvisionedThroughput()
+		                                  .WithReadCapacityUnits(1)
+		                                  .WithWriteCapacityUnits(1));
+	};
 	
 	//check status of the table
 	auto userTableOut=dbClient.DescribeTable(DescribeTableRequest()
@@ -226,6 +238,7 @@ void PersistentStore::InitializeUserTable(){
 			AttDef().WithAttributeName("sortKey").WithAttributeType(SAT::S),
 			AttDef().WithAttributeName("token").WithAttributeType(SAT::S),
 			AttDef().WithAttributeName("globusID").WithAttributeType(SAT::S),
+			AttDef().WithAttributeName("unixName").WithAttributeType(SAT::S),
 			AttDef().WithAttributeName("groupName").WithAttributeType(SAT::S)
 		});
 		request.SetKeySchema({
@@ -238,6 +251,7 @@ void PersistentStore::InitializeUserTable(){
 		request.AddGlobalSecondaryIndexes(getByTokenIndex());
 		request.AddGlobalSecondaryIndexes(getByGlobusIDIndex());
 		request.AddGlobalSecondaryIndexes(getByGroupIndex());
+		request.AddGlobalSecondaryIndexes(getByUnixNameIndex());
 		
 		auto createOut=dbClient.CreateTable(request);
 		if(!createOut.IsSuccess())
@@ -303,6 +317,15 @@ void PersistentStore::InitializeUserTable(){
 				log_fatal("Failed to add by-Group index to user table: " + createOut.GetError().GetMessage());
 			waitIndexReadiness(dbClient,userTableName,"ByGroup");
 			log_info("Added by-Group index to user table");
+		}
+		if(!hasIndex(tableDesc,"ByUnixName")){
+			auto request=updateTableWithNewSecondaryIndex(userTableName,getByGroupIndex());
+			request.WithAttributeDefinitions({AttDef().WithAttributeName("unixName").WithAttributeType(SAT::S)});
+			auto createOut=dbClient.UpdateTable(request);
+			if(!createOut.IsSuccess())
+				log_fatal("Failed to add by-UnixName index to user table: " + createOut.GetError().GetMessage());
+			waitIndexReadiness(dbClient,userTableName,"ByUnixName");
+			log_info("Added by-UnixName index to user table");
 		}
 	}
 }
@@ -411,6 +434,7 @@ void PersistentStore::InitializeTables(std::string bootstrapUserFile){
 			log_fatal("Unable to read root user credentials");
 		rootUser.globusID="No Globus ID";
 		rootUser.sshKey="No SSH key";
+		rootUser.unixName="root";
 		rootUser.superuser=true;
 		rootUser.serviceAccount=true;
 		rootUser.valid=true;
@@ -433,6 +457,7 @@ bool PersistentStore::addUser(const User& user){
 		{"phone",AttributeValue(user.phone)},
 		{"institution",AttributeValue(user.institution)},
 		{"sshKey",AttributeValue(user.sshKey)},
+		{"unixName",AttributeValue(user.unixName)},
 		{"superuser",AttributeValue().SetBool(user.superuser)},
 		{"serviceAccount",AttributeValue().SetBool(user.serviceAccount)}
 	});
@@ -490,6 +515,7 @@ User PersistentStore::getUser(const std::string& id){
 	user.token=findOrThrow(item,"token","user record missing token attribute").GetS();
 	user.globusID=findOrThrow(item,"globusID","user record missing globusID attribute").GetS();
 	user.sshKey=findOrThrow(item,"sshKey","user record missing sshKey attribute").GetS();
+	user.unixName=findOrThrow(item,"unixName","user record missing unixName attribute").GetS();
 	user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
 	user.serviceAccount=findOrThrow(item,"serviceAccount","user record missing serviceAccount attribute").GetBool();
 	
@@ -550,6 +576,7 @@ User PersistentStore::findUserByToken(const std::string& token){
 	user.institution=findOrDefault(item,"institution",missingString).GetS();
 	user.globusID=findOrThrow(item,"globusID","user record missing globusID attribute").GetS();
 	user.sshKey=findOrThrow(item,"sshKey","user record missing sshKey attribute").GetS();
+	user.unixName=findOrThrow(item,"unixName","user record missing unixName attribute").GetS();
 	user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
 	user.serviceAccount=findOrThrow(item,"serviceAccount","user record missing serviceAccount attribute").GetBool();
 	
@@ -627,6 +654,7 @@ bool PersistentStore::updateUser(const User& user, const User& oldUser){
 	                                            {"phone",AVU().WithValue(AV(user.phone))},
 	                                            {"institution",AVU().WithValue(AV(user.institution))},
 	                                            {"sshKey",AVU().WithValue(AV(user.sshKey))},
+	                                            {"unixName",AVU().WithValue(AV(user.unixName))},
 	                                            {"superuser",AVU().WithValue(AV().SetBool(user.superuser))},
 	                                            {"serviceAccount",AVU().WithValue(AV().SetBool(user.serviceAccount))}
 	                                 }));
@@ -732,6 +760,7 @@ std::vector<User> PersistentStore::listUsers(){
 			user.token=findOrThrow(item,"token","user record missing token attribute").GetS();
 			user.globusID=findOrThrow(item,"globusID","user record missing globusID attribute").GetS();
 			user.sshKey=findOrThrow(item,"sshKey","user record missing sshKey attribute").GetS();
+			user.unixName=findOrThrow(item,"sshKey","user record missing unixName attribute").GetS();
 			user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
 			user.serviceAccount=findOrThrow(item,"serviceAccount","user record missing serviceAccount attribute").GetBool();
 			collected.push_back(user);
@@ -855,6 +884,26 @@ GroupMembership PersistentStore::userStatusInGroup(const std::string& uID, std::
 	groupMembershipByGroupCache.insert_or_assign(groupName,record);
 	
 	return membership;
+}
+
+bool PersistentStore::unixNameInUse(const std::string& name){
+	//TODO: Should this be cached?
+	//need to query the database
+	databaseQueries++;
+	using AV=Aws::DynamoDB::Model::AttributeValue;
+	auto outcome=dbClient.Query(Aws::DynamoDB::Model::QueryRequest()
+								.WithTableName(userTableName)
+								.WithIndexName("ByUnixName")
+								.WithKeyConditionExpression("#unixName = :name_val")
+								.WithExpressionAttributeNames({{"#unixName","unixName"}})
+								.WithExpressionAttributeValues({{":name_val",AV(name)}})
+								);
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_fatal("Failed to look up unix name: " << err.GetMessage());
+	}
+	const auto& queryResult=outcome.GetResult();
+	return (queryResult.GetCount()>0);
 }
 
 std::vector<GroupMembership> PersistentStore::getUserGroupMemberships(const std::string& uID){

@@ -34,8 +34,10 @@
           "type": "string"
         },
         "public_key": {
-          "type": "string",
-          "required": true
+          "type": "string"
+        },
+        "unix_name": {
+          "type": "string"
         },
         "superuser": {
           "type": "boolean"

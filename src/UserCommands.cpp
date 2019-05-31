@@ -30,6 +30,7 @@ crow::response listUsers(PersistentStore& store, const crow::request& req){
 		userData.AddMember("email", rapidjson::StringRef(user.email.c_str()), alloc);
 		userData.AddMember("phone", rapidjson::StringRef(user.phone.c_str()), alloc);
 		userData.AddMember("institution", rapidjson::StringRef(user.institution.c_str()), alloc);
+		userData.AddMember("unix_name", user.unixName, alloc);
 		userResult.AddMember("metadata", userData, alloc);
 		resultItems.PushBack(userResult, alloc);
 	}
@@ -122,6 +123,14 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 		log_warn("User public key in user creation request was not a string");
 		return crow::response(400,generateError("Incorrect type for user public key"));
 	}
+	if(!body["metadata"].HasMember("unix_name")){
+		log_warn("User creation request was missing user unix name");
+		return crow::response(400,generateError("Missing user unix name in request"));
+	}
+	if(!body["metadata"]["unix_name"].IsString()){
+		log_warn("User unix name in user creation request was not a string");
+		return crow::response(400,generateError("Incorrect type for user unix name key"));
+	}
 	if(!body["metadata"].HasMember("superuser")){
 		log_warn("User creation request was missing superuser flag");
 		return crow::response(400,generateError("Missing superuser flag in request"));
@@ -148,6 +157,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	targetUser.phone=body["metadata"]["phone"].GetString();
 	targetUser.institution=body["metadata"]["institution"].GetString();
 	targetUser.sshKey=body["metadata"]["public_key"].GetString();
+	targetUser.unixName=body["metadata"]["unix_name"].GetString();
 	targetUser.superuser=body["metadata"]["superuser"].GetBool();
 	targetUser.serviceAccount=body["metadata"]["service_account"].GetBool();
 	targetUser.valid=true;
@@ -155,6 +165,11 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	if(store.findUserByGlobusID(targetUser.globusID)){
 		log_warn("User Globus ID is already registered");
 		return crow::response(400,generateError("Globus ID is already registered"));
+	}
+	
+	if(store.unixNameInUse(targetUser.unixName)){
+		log_warn("User unix name is already in use");
+		return crow::response(400,generateError("Unix name is already in use"));
 	}
 	
 	log_info("Creating " << targetUser);
@@ -186,6 +201,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	metadata.AddMember("institution", rapidjson::StringRef(targetUser.institution.c_str()), alloc);
 	metadata.AddMember("access_token", rapidjson::StringRef(targetUser.token.c_str()), alloc);
 	metadata.AddMember("public_key", rapidjson::StringRef(targetUser.sshKey.c_str()), alloc);
+	metadata.AddMember("unix_name", rapidjson::StringRef(targetUser.unixName.c_str()), alloc);
 	metadata.AddMember("superuser", targetUser.superuser, alloc);
 	metadata.AddMember("service_account", targetUser.serviceAccount, alloc);
 	rapidjson::Value groupMemberships(rapidjson::kArrayType);
@@ -230,6 +246,7 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 	metadata.AddMember("institution", rapidjson::StringRef(targetUser.institution.c_str()), alloc);
 	metadata.AddMember("access_token", rapidjson::StringRef(targetUser.token.c_str()), alloc);
 	metadata.AddMember("public_key", rapidjson::StringRef(targetUser.sshKey.c_str()), alloc);
+	metadata.AddMember("unix_name", rapidjson::StringRef(targetUser.unixName.c_str()), alloc);
 	metadata.AddMember("superuser", targetUser.superuser, alloc);
 	metadata.AddMember("service_account", targetUser.serviceAccount, alloc);
 	rapidjson::Value groupMemberships(rapidjson::kArrayType);
@@ -298,6 +315,16 @@ crow::response updateUser(PersistentStore& store, const crow::request& req, cons
 			return crow::response(400,generateError("Incorrect type for user institution"));
 		updatedUser.institution=body["metadata"]["institution"].GetString();
 	}
+	if(body["metadata"].HasMember("public_key")){
+		if(!body["metadata"]["public_key"].IsString())
+			return crow::response(400,generateError("Incorrect type for user public key"));
+		updatedUser.sshKey=body["metadata"]["public_key"].GetString();
+	}
+	if(body["metadata"].HasMember("unix_name")){
+		if(!body["metadata"]["unix_name"].IsString())
+			return crow::response(400,generateError("Incorrect type for user unix name key"));
+		updatedUser.unixName=body["metadata"]["unix_name"].GetString();
+	}
 	if(body["metadata"].HasMember("superuser")){
 		if(!body["metadata"]["superuser"].IsBool())
 			return crow::response(400,generateError("Incorrect type for user superuser flag"));
@@ -305,6 +332,12 @@ crow::response updateUser(PersistentStore& store, const crow::request& req, cons
 			return crow::response(403,generateError("Not authorized"));
 		if(user.superuser)
 			updatedUser.superuser=body["metadata"]["superuser"].GetBool();
+	}
+	
+	if(updatedUser.unixName!=targetUser.unixName && 
+	   store.unixNameInUse(updatedUser.unixName)){
+		log_warn("User unix name is already in use");
+		return crow::response(400,generateError("Unix name is already in use"));
 	}
 	
 	log_info("Updating " << targetUser << " info");
@@ -545,6 +578,29 @@ crow::response findUser(PersistentStore& store, const crow::request& req){
 	result.AddMember("metadata", metadata, alloc);
 
 	return crow::response(to_string(result));
+}
+
+crow::response checkUnixName(PersistentStore& store, const crow::request& req){
+	//this is the requesting user
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested whether a unix name is in use");
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+		
+	if(!req.url_params.get("unix_name"))
+		return crow::response(400,generateError("Missing unix name in request"));
+	std::string unixName=req.url_params.get("unix_name");
+	
+	try{
+		bool inUse=store.unixNameInUse(unixName);
+		rapidjson::Document result(rapidjson::kObjectType);
+		rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
+		result.AddMember("in_use",inUse,alloc);
+		return crow::response(to_string(result));
+	}
+	catch(std::runtime_error& err){
+		return crow::response(500,generateError("Failed to look up unix name"));
+	}
 }
 
 crow::response replaceUserToken(PersistentStore& store, const crow::request& req, const std::string uID){

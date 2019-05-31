@@ -22,6 +22,7 @@ struct User{
 	std::string token;
 	std::string globusID;
 	std::string sshKey;
+	std::string unixName;
 	bool superuser;
 	///indicates that the account is used for some type of automation and should
 	///be hidden form other users under typical circumstances
