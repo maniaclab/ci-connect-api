@@ -335,7 +335,7 @@ crow::response updateGroup(PersistentStore& store, const crow::request& req, std
 		
 	groupName=canonicalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser || store.userStatusInGroup(user.id,groupName).state!=GroupMembership::Admin)
+	if(!user.superuser && store.userStatusInGroup(user.id,groupName).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
 	
 	Group targetGroup = store.getGroup(groupName);
@@ -414,7 +414,7 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, std
 		return crow::response(403,generateError("Not authorized"));
 	groupName=canonicalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser || store.userStatusInGroup(user.id,groupName).state!=GroupMembership::Admin)
+	if(!user.superuser && store.userStatusInGroup(user.id,groupName).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
 	
 	Group targetGroup = store.getGroup(groupName);
