@@ -182,7 +182,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	
 	GroupMembership baseMembership;
 	baseMembership.userID=targetUser.id;
-	baseMembership.groupName=""; //the root group
+	baseMembership.groupName="root"; //the root group
 	baseMembership.state=GroupMembership::Active;
 	baseMembership.stateSetBy=store.getRootUser().id;
 	baseMembership.valid=true;
@@ -427,6 +427,35 @@ namespace{
 		}
 		return "";
 	}
+	
+	///Make sure that the given user is a member of every group enclosing the 
+	///specified one, and if not, add them. This bypasses pending states, etc.
+	///so it should only be applied when the user becomes an active member, not
+	///pending or disabled. 
+	bool ensureEnclosingMembership(PersistentStore& store, const std::string& userID, std::string groupName, const std::string& stateSetBy){
+		while(!groupName.empty()){
+			auto sepPos=groupName.rfind('.');
+			if(sepPos==std::string::npos)
+				return true; //no farther up to walk
+			groupName=groupName.substr(0,sepPos);
+			if(groupName.empty())
+				return true;
+			
+			if(!store.userStatusInGroup(userID,groupName).isMember()){
+				//is the user is not already a member at this level, add them
+				GroupMembership membership;
+				membership.userID=userID;
+				membership.groupName=groupName;
+				membership.stateSetBy=stateSetBy;
+				membership.state=GroupMembership::Active; //always as a normal member
+				if(!store.setUserStatusInGroup(membership)){
+					log_error("Failed to add user " << userID << " to " << groupName << "; enclosing group memberships may be inconsistent");
+					return false;
+				}
+			}
+		}
+		return true;
+	}
 }
 
 crow::response setUserStatusInGroup(PersistentStore& store, const crow::request& req, 
@@ -520,9 +549,12 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 	
 	membership.valid=true;
 	bool success=store.setUserStatusInGroup(membership);
-	
 	if(!success)
 		return crow::response(500,generateError("User addition to Group failed"));
+	
+	if(membership.isMember())
+		ensureEnclosingMembership(store,membership.userID,membership.groupName,membership.stateSetBy);	
+	
 	return(crow::response(200));
 }
 
