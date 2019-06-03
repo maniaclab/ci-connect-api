@@ -484,3 +484,19 @@ crow::response getSubgroups(PersistentStore& store, const crow::request& req, st
 	
 	return crow::response(to_string(result));
 }
+
+crow::response getScienceFields(PersistentStore& store, const crow::request& req){
+	rapidjson::Document result(rapidjson::kObjectType);
+	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
+	
+	result.AddMember("apiVersion", "v1alpha3", alloc);
+	rapidjson::Value resultItems(rapidjson::kArrayType);
+	for (const auto& field : scienceFields){
+		rapidjson::Value item(rapidjson::kStringType);
+		item.SetString(field, alloc);
+		resultItems.PushBack(item, alloc);
+	}
+	result.AddMember("fields_of_science", resultItems, alloc);
+	
+	return crow::response(to_string(result));
+}

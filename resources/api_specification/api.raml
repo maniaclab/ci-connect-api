@@ -577,6 +577,15 @@ version: v1alpha1
             body:
               application/json:
                 type: !include ErrorResultSchema.json
+/fields_of_science:
+  get:
+    description: List of all accepted fields of science
+    responses:
+      200:
+        description: Success
+        body:
+          application/json:
+            type: !include FieldListResultSchema.json
 /multiplex:
   post:
     description: Execute multiple requests concurrently

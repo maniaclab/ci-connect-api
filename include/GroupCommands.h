@@ -27,6 +27,8 @@ crow::response getGroupMemberStatus(PersistentStore& store, const crow::request&
 
 crow::response getSubgroups(PersistentStore& store, const crow::request& req, std::string groupName);
 
+crow::response getScienceFields(PersistentStore& store, const crow::request& req);
+
 std::string canonicalizeGroupName(std::string name, const std::string& enclosingGroup="root");
 
 #endif //SLATE_GroupCOMMANDS_H
