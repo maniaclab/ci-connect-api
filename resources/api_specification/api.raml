@@ -553,30 +553,127 @@ version: v1alpha1
             body:
               application/json:
                 type: !include ErrorResultSchema.json
-      put:
-        description: Create a group
+      /{group_name}:
+        put:
+          description: Create a group
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          body:
+            application/json:
+              type: !include GroupCreateRequestSchema.json
+          responses:
+            200:
+              description: Success
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description:Parent group not found
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+    /subgroup_requests:
+      get:
+        description: List a group's requested subgroups
         queryParameters:
           token:
             displayName: Access Token
             type: string
             description: User's authentication token
             required: true
-        body:
-          application/json:
-            type: !include GroupCreateRequestSchema.json
         responses:
           200:
             description: Success
+            body:
+              application/json:
+                type: !include GroupRequestListResultSchema.json
           403:
             description: Authentication/authorization error
             body:
               application/json:
                 type: !include ErrorResultSchema.json
           404: 
-            description:Parent group not found
+            description: User not found, group not found, user not member of group
             body:
               application/json:
                 type: !include ErrorResultSchema.json
+      /{group_name}:
+        put:
+          description: Request creation of a subgroup
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          body:
+            application/json:
+              type: !include GroupCreateRequestSchema.json
+          responses:
+            200:
+              description: Success
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description:Parent group not found
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+        delete:
+          description: Deny a subgroup creation request
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          responses:
+            200:
+              description: Success
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description:Parent group not found
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+        /approve:
+          put:
+            description: Request creation of a subgroup
+            queryParameters:
+              token:
+                displayName: Access Token
+                type: string
+                description: User's authentication token
+                required: true
+            body:
+              application/json:
+                type: !include GroupCreateRequestSchema.json
+            responses:
+              200:
+                description: Success
+              403:
+                description: Authentication/authorization error
+                body:
+                  application/json:
+                    type: !include ErrorResultSchema.json
+              404: 
+                description:Parent group not found
+                body:
+                  application/json:
+                    type: !include ErrorResultSchema.json
 /fields_of_science:
   get:
     description: List of all accepted fields of science

@@ -999,6 +999,41 @@ bool PersistentStore::addGroup(const Group& group){
 	return true;
 }
 
+bool PersistentStore::addGroupRequest(const GroupRequest& gr){
+	if(gr.email.empty())
+		throw std::runtime_error("Group email must not be empty because Dynamo");
+	if(gr.phone.empty())
+		throw std::runtime_error("Group phone must not be empty because Dynamo");
+	if(gr.scienceField.empty())
+		throw std::runtime_error("Group scienceField must not be empty because Dynamo");
+	if(gr.description.empty())
+		throw std::runtime_error("Group description must not be empty because Dynamo");
+	using AV=Aws::DynamoDB::Model::AttributeValue;
+	auto outcome=dbClient.PutItem(Aws::DynamoDB::Model::PutItemRequest()
+	                              .WithTableName(groupTableName)
+	                              .WithItem({{"name",AV(gr.name)},
+	                                         {"sortKey",AV(gr.name)},
+	                                         {"displayName",AV(gr.displayName)},
+	                                         {"email",AV(gr.email)},
+	                                         {"phone",AV(gr.phone)},
+	                                         {"scienceField",AV(gr.scienceField)},
+	                                         {"description",AV(gr.description)},
+	                                         {"requester",AV(gr.requester)}
+	                              }));
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to add Group record: " << err.GetMessage());
+		return false;
+	}
+	
+	//???
+	//update caches
+	//CacheRecord<Group> record(group,groupCacheValidity);
+	//groupCache.insert_or_assign(group.name,record);
+        
+	return true;
+}
+
 bool PersistentStore::removeGroup(const std::string& groupName){
 	using Aws::DynamoDB::Model::AttributeValue;
 	
@@ -1111,9 +1146,8 @@ std::vector<Group> PersistentStore::listGroups(){
 	if(groupCacheExpirationTime.load() > std::chrono::steady_clock::now()){
 	    auto table = groupCache.lock_table();
 		for(auto itr = table.cbegin(); itr != table.cend(); itr++){
-		        auto group = itr->second;
 			cacheHits++;
-			collected.push_back(group);
+			collected.push_back(itr->second);
 		}
 	
 		table.unlock();
@@ -1123,8 +1157,8 @@ std::vector<Group> PersistentStore::listGroups(){
 	databaseScans++;
 	Aws::DynamoDB::Model::ScanRequest request;
 	request.SetTableName(groupTableName);
-	request.SetFilterExpression("attribute_exists(#name)");
-	request.SetExpressionAttributeNames({{"#name","name"}});
+	request.SetFilterExpression("attribute_not_exists(#requester)");
+	request.SetExpressionAttributeNames({{"#requester", "requester"}});
 	bool keepGoing=false;
 	
 	do{
@@ -1160,6 +1194,65 @@ std::vector<Group> PersistentStore::listGroups(){
 		}
 	}while(keepGoing);
 	groupCacheExpirationTime=std::chrono::steady_clock::now()+groupCacheValidity;
+	
+	return collected;
+}
+
+std::vector<GroupRequest> PersistentStore::listGroupRequests(){
+	//First check if group requests are cached
+	std::vector<GroupRequest> collected;
+	if(groupRequestCacheExpirationTime.load() > std::chrono::steady_clock::now()){
+	    auto table = groupRequestCache.lock_table();
+		for(auto itr = table.cbegin(); itr != table.cend(); itr++){
+			cacheHits++;
+			collected.push_back(itr->second);
+		}
+	
+		table.unlock();
+		return collected;
+	}	
+
+	databaseScans++;
+	Aws::DynamoDB::Model::ScanRequest request;
+	request.SetTableName(groupTableName);
+	request.SetFilterExpression("attribute_exists(#requester)");
+	request.SetExpressionAttributeNames({{"#requester", "requester"}});
+	bool keepGoing=false;
+	
+	do{
+		auto outcome=dbClient.Scan(request);
+		if(!outcome.IsSuccess()){
+			//TODO: more principled logging or reporting of the nature of the error
+			auto err=outcome.GetError();
+			log_error("Failed to fetch Group records: " << err.GetMessage());
+			return collected;
+		}
+		const auto& result=outcome.GetResult();
+		//set up fetching the next page if necessary
+		if(!result.GetLastEvaluatedKey().empty()){
+			keepGoing=true;
+			request.SetExclusiveStartKey(result.GetLastEvaluatedKey());
+		}
+		else
+			keepGoing=false;
+		//collect results from this page
+		for(const auto& item : result.GetItems()){
+			GroupRequest gr;
+			gr.valid=true;
+			gr.name=findOrThrow(item,"name","Group request record missing name attribute").GetS();
+			gr.displayName=findOrThrow(item,"displayName","Group request record missing displayName attribute").GetS();
+			gr.email=findOrThrow(item,"email","Group request record missing email attribute").GetS();
+			gr.phone=findOrThrow(item,"phone","Group request record missing phone attribute").GetS();
+			gr.scienceField=findOrThrow(item,"scienceField","Group request record missing field of science attribute").GetS();
+			gr.description=findOrThrow(item,"description","Group request record missing description attribute").GetS();
+			gr.requester=findOrThrow(item,"requester","Group request record missing requester attribute").GetS();
+			collected.push_back(gr);
+
+			CacheRecord<GroupRequest> record(gr,groupCacheValidity);
+			groupRequestCache.insert_or_assign(gr.name,record);
+		}
+	}while(keepGoing);
+	groupRequestCacheExpirationTime=std::chrono::steady_clock::now()+groupCacheValidity;
 	
 	return collected;
 }
@@ -1200,12 +1293,84 @@ Group PersistentStore::getGroup(const std::string& groupName){
 	group.phone=findOrThrow(item,"phone","Group record missing phone attribute").GetS();
 	group.scienceField=findOrThrow(item,"scienceField","Group record missing field of science attribute").GetS();
 	group.description=findOrThrow(item,"description","Group record missing description attribute").GetS();
+	if(item.count("requester"))
+		group.pending=true;
 	
 	//update caches
 	CacheRecord<Group> record(group,groupCacheValidity);
 	groupCache.insert_or_assign(groupName,record);
 	
 	return group;
+}
+
+GroupRequest PersistentStore::getGroupRequest(const std::string& groupName){
+	/*//first see if we have this cached
+	{
+		CacheRecord<Group> record;
+		if(groupCache.find(groupName,record)){
+			//we have a cached record; is it still valid?
+			if(record){ //it is, just return it
+				cacheHits++;
+				return record;
+			}
+		}
+	}*/
+	//need to query the database
+	databaseQueries++;
+	log_info("Querying database for Group " << groupName);
+	using Aws::DynamoDB::Model::AttributeValue;
+	auto outcome=dbClient.GetItem(Aws::DynamoDB::Model::GetItemRequest()
+	                              .WithTableName(groupTableName)
+	                              .WithKey({{"name",AttributeValue(groupName)},
+	                                        {"sortKey",AttributeValue(groupName)}}));
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to fetch Group Request record: " << err.GetMessage());
+		return GroupRequest();
+	}
+	const auto& item=outcome.GetResult().GetItem();
+	if(item.empty() || !item.count("requester")) //no match found
+		return GroupRequest{};
+	GroupRequest gr;
+	gr.valid=true;
+	gr.name=groupName;
+	gr.displayName=findOrThrow(item,"email","Group Request record missing displayName attribute").GetS();
+	gr.email=findOrThrow(item,"email","Group Request record missing email attribute").GetS();
+	gr.phone=findOrThrow(item,"phone","Group Request record missing phone attribute").GetS();
+	gr.scienceField=findOrThrow(item,"scienceField","Group Request record missing field of science attribute").GetS();
+	gr.description=findOrThrow(item,"description","Group Request record missing description attribute").GetS();
+	gr.requester=findOrThrow(item,"requester","Group Request record missing requester attribute").GetS();
+	
+	/*//update caches
+	CacheRecord<Group> record(group,groupCacheValidity);
+	groupCache.insert_or_assign(groupName,record);*/
+	
+	return gr;
+}
+
+bool PersistentStore::approveGroupRequest(const std::string& groupName){
+	using AV=Aws::DynamoDB::Model::AttributeValue;
+	using AVU=Aws::DynamoDB::Model::AttributeValueUpdate;
+	auto outcome=dbClient.UpdateItem(Aws::DynamoDB::Model::UpdateItemRequest()
+	                                 .WithTableName(groupTableName)
+	                                 .WithKey({{"name",AV(groupName)},
+	                                           {"sortKey",AV(groupName)}})
+	                                 .WithAttributeUpdates({
+	                                            {"requester",AVU().WithAction(Aws::DynamoDB::Model::AttributeAction::DELETE_)},
+	                                            })
+	                                 );
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to convert Group Request record into Group Record: " << err.GetMessage());
+		return false;
+	}
+	
+	{ //make sure no old, incorrect cache entries persist
+		groupCache.erase(groupName);
+		groupMembershipByGroupCache.erase(groupName);
+	}
+	
+	return true;
 }
 
 std::string PersistentStore::getStatistics() const{

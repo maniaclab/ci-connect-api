@@ -27,6 +27,12 @@ crow::response getGroupMemberStatus(PersistentStore& store, const crow::request&
 
 crow::response getSubgroups(PersistentStore& store, const crow::request& req, std::string groupName);
 
+crow::response getSubgroupRequests(PersistentStore& store, const crow::request& req, std::string groupName);
+
+crow::response approveSubgroupRequest(PersistentStore& store, const crow::request& req, std::string parentGroupName, std::string newGroupName);
+
+crow::response denySubgroupRequest(PersistentStore& store, const crow::request& req, std::string parentGroupName, std::string newGroupName);
+
 crow::response getScienceFields(PersistentStore& store, const crow::request& req);
 
 std::string canonicalizeGroupName(std::string name, const std::string& enclosingGroup="root");

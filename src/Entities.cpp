@@ -29,7 +29,17 @@ bool operator==(const Group& g1, const Group& g2){
 std::ostream& operator<<(std::ostream& os, const Group& group){
 	if(!group)
 		return os << "invalid Group";
-	return os << group.name;
+	return os << "group " << group.name;
+}
+
+bool operator==(const GroupRequest& g1, const GroupRequest& g2){
+	return g1.name==g2.name;
+}
+
+std::ostream& operator<<(std::ostream& os, const GroupRequest& group){
+	if(!group)
+		return os << "invalid Group Creation Request";
+	return os << "group creation request for " << group.name;
 }
 
 std::string GroupMembership::to_string(GroupMembership::Status status){

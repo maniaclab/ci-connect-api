@@ -161,7 +161,8 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	if(!parentGroup) //the parent group must exist
 		return crow::response(404,generateError("Parent group not found"));
 	//only an admin in the parent group may create child groups
-	if(store.userStatusInGroup(user.id,parentGroup.name).state!=GroupMembership::Admin)
+	//other members may request the creation of child groups
+	if(!user.superuser && !store.userStatusInGroup(user.id,parentGroup.name).isMember())
 		return crow::response(403,generateError("Not authorized"));
 	{
 		Group existingGroup=store.getGroup(newGroupName);
@@ -253,48 +254,48 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	if(group.description.empty())
 		group.description=" "; //Dynamo will get upset if a string is empty
 	
-	group.valid=true;
+	//if the user is a superuser or group admin, we just go ahead with creating the group
+	if(!user.superuser && store.userStatusInGroup(user.id,parentGroup.name).state!=GroupMembership::Admin){
+		group.valid=true;
 	
-	log_info("Creating Group " << group);
-	bool created=store.addGroup(group);
-	if(!created)
-		return crow::response(500,generateError("Group creation failed"));
+		log_info("Creating Group " << group);
+		bool created=store.addGroup(group);
+		if(!created)
+			return crow::response(500,generateError("Group creation failed"));
 	
-	//Make the creating user an initial member of the group
-	GroupMembership initialAdmin;
-	initialAdmin.userID=user.id;
-	initialAdmin.groupName=group.name;
-	initialAdmin.state=GroupMembership::Admin;
-	initialAdmin.stateSetBy=user.id;
-	initialAdmin.valid=true;
-	bool added=store.setUserStatusInGroup(initialAdmin);
-	if(!added){
-		//TODO: possible problem: If we get here, we may end up with a valid group
-		//but with no members and not return its ID either
-		auto problem="Failed to add creating user "+
-		             boost::lexical_cast<std::string>(user)+" to new Group "+
-		             boost::lexical_cast<std::string>(group);
-		log_error(problem);
-		return crow::response(500,generateError(problem));
+		//Make the creating user an initial member of the group
+		GroupMembership initialAdmin;
+		initialAdmin.userID=user.id;
+		initialAdmin.groupName=group.name;
+		initialAdmin.state=GroupMembership::Admin;
+		initialAdmin.stateSetBy=user.id;
+		initialAdmin.valid=true;
+		bool added=store.setUserStatusInGroup(initialAdmin);
+		if(!added){
+			//TODO: possible problem: If we get here, we may end up with a valid group
+			//but with no members and not return its ID either
+			auto problem="Failed to add creating user "+
+						 boost::lexical_cast<std::string>(user)+" to new Group "+
+						 boost::lexical_cast<std::string>(group);
+			log_error(problem);
+			return crow::response(500,generateError(problem));
+		}
+	
+		log_info("Created " << group << " on behalf of " << user);
+	}
+	else{ //otherwise, store a group creation request for later approval by an admin
+		GroupRequest gr(group,user.id);
+		gr.valid=true;
+		
+		log_info("Storing Group Request for " << gr);
+		bool created=store.addGroupRequest(gr);
+		if(!created)
+			return crow::response(500,generateError("Group Request creation failed"));
+		
+		log_info("Created " << gr << " on behalf of " << user);
 	}
 	
-	log_info("Created " << group << " on behalf of " << user);
-
-	rapidjson::Document result(rapidjson::kObjectType);
-	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
-	
-	result.AddMember("apiVersion", "v1alpha3", alloc);
-	result.AddMember("kind", "Group", alloc);
-	rapidjson::Value metadata(rapidjson::kObjectType);
-	metadata.AddMember("name", group.name, alloc);
-	metadata.AddMember("display_name", group.displayName, alloc);
-	metadata.AddMember("email", group.email, alloc);
-	metadata.AddMember("phone", group.phone, alloc);
-	metadata.AddMember("field_of_science", group.scienceField, alloc);
-	metadata.AddMember("description", group.description, alloc);
-	result.AddMember("metadata", metadata, alloc);
-	
-	return crow::response(to_string(result));
+	return crow::response(200);
 }
 
 crow::response getGroupInfo(PersistentStore& store, const crow::request& req, std::string groupName){
@@ -518,6 +519,91 @@ crow::response getSubgroups(PersistentStore& store, const crow::request& req, st
 	result.AddMember("groups", resultItems, alloc);
 	
 	return crow::response(to_string(result));
+}
+
+crow::response getSubgroupRequests(PersistentStore& store, const crow::request& req, std::string groupName){
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to get subgroups of " << groupName);
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+	
+	groupName=canonicalizeGroupName(groupName);
+	Group parentGroup = store.getGroup(groupName);
+	if(!parentGroup)
+		return crow::response(404,generateError("Group not found"));
+	
+	std::string filterPrefix=groupName+".";
+	std::vector<GroupRequest> allGroups=store.listGroupRequests();
+
+	rapidjson::Document result(rapidjson::kObjectType);
+	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
+	
+	result.AddMember("apiVersion", "v1alpha3", alloc);
+	rapidjson::Value resultItems(rapidjson::kArrayType);
+	for (const GroupRequest& group : allGroups){
+		if(group.name.find(filterPrefix)!=0)
+			continue;
+		rapidjson::Value groupResult(rapidjson::kObjectType);
+		groupResult.AddMember("name", group.name, alloc);
+		groupResult.AddMember("display_name", group.displayName, alloc);
+		groupResult.AddMember("email", group.email, alloc);
+		groupResult.AddMember("phone", group.phone, alloc);
+		groupResult.AddMember("field_of_science", group.scienceField, alloc);
+		groupResult.AddMember("description", group.description, alloc);
+		groupResult.AddMember("requester", group.requester, alloc);
+		resultItems.PushBack(groupResult, alloc);
+	}
+	result.AddMember("groups", resultItems, alloc);
+	
+	return crow::response(to_string(result));
+}
+
+crow::response approveSubgroupRequest(PersistentStore& store, const crow::request& req, std::string parentGroupName, std::string newGroupName){
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to approve creation of the " << newGroupName << " subgroup of " << parentGroupName);
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+		
+	parentGroupName=canonicalizeGroupName(parentGroupName);
+	//Only superusers and admins of a Group can alter it
+	if(!user.superuser && store.userStatusInGroup(user.id,parentGroupName).state!=GroupMembership::Admin)
+		return crow::response(403,generateError("Not authorized"));
+	
+	newGroupName=canonicalizeGroupName(newGroupName);
+	Group newGroup = store.getGroup(newGroupName);
+	if(!newGroup.pending)
+		return crow::response(400,generateError("Group already exists"));
+	
+	bool success=store.approveGroupRequest(newGroupName);
+	
+	if (!success)
+		return crow::response(500, generateError("Storing group request approval failed"));
+	
+	return(crow::response(200));
+}
+
+crow::response denySubgroupRequest(PersistentStore& store, const crow::request& req, std::string parentGroupName, std::string newGroupName){
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to deny creation of the " << newGroupName << " subgroup of " << parentGroupName);
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+		
+	parentGroupName=canonicalizeGroupName(parentGroupName);
+	//Only superusers and admins of a Group can alter it
+	if(!user.superuser && store.userStatusInGroup(user.id,parentGroupName).state!=GroupMembership::Admin)
+		return crow::response(403,generateError("Not authorized"));
+	
+	newGroupName=canonicalizeGroupName(newGroupName);
+	Group newGroup = store.getGroup(newGroupName);
+	if(!newGroup.pending)
+		return crow::response(400,generateError("Group already exists"));
+	
+	bool success = store.removeGroup(newGroupName);
+	
+	if (!success)
+		return crow::response(500, generateError("Deleting group request failed"));
+	
+	return(crow::response(200));
 }
 
 crow::response getScienceFields(PersistentStore& store, const crow::request& req){

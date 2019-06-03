@@ -204,6 +204,12 @@ public:
 	///\return whether the addition operation was successful
 	bool addGroup(const Group& group);
 	
+	///Create a record for a group creation request
+	///\param group the new group
+	///\pre the new group must have a unique ID and name
+	///\return whether the addition operation was successful
+	bool addGroupRequest(const GroupRequest& gr);
+	
 	///Delete a group record
 	///\param groupID the ID of the group to delete
 	///\return Whether the user record was successfully removed from the database
@@ -224,10 +230,16 @@ public:
 	///\return all recorded groups
 	std::vector<Group> listGroups();
 	
+	std::vector<GroupRequest> listGroupRequests();
+	
 	///Find the group, if any, with the given UUID or name
 	///\param idOrName the UUID or name of the group to look up
 	///\return the group corresponding to the name, or an invalid group if none exists
 	Group getGroup(const std::string& groupName);
+	
+	GroupRequest getGroupRequest(const std::string& groupName);
+	
+	bool approveGroupRequest(const std::string& groupName);
 	
 	///Return human-readable performance statistics
 	std::string getStatistics() const;
@@ -260,6 +272,8 @@ private:
 	const std::chrono::seconds groupCacheValidity;
 	connect_atomic<std::chrono::steady_clock::time_point> groupCacheExpirationTime;
 	cuckoohash_map<std::string,CacheRecord<Group>> groupCache;
+	connect_atomic<std::chrono::steady_clock::time_point> groupRequestCacheExpirationTime;
+	cuckoohash_map<std::string,CacheRecord<GroupRequest>> groupRequestCache;
 	
 	///Check that all necessary tables exist in the database, and create them if 
 	///they do not

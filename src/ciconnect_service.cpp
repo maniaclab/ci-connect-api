@@ -347,6 +347,14 @@ int main(int argc, char* argv[]){
 	  [&](const crow::request& req, const std::string& groupID){ return getSubgroups(store,req,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/groups/<string>/subgroups/<string>").methods("PUT"_method)(
 	  [&](const crow::request& req, const std::string& pGroup, const std::string& cGroup){ return createGroup(store,req,pGroup,cGroup); });
+	CROW_ROUTE(server, "/v1alpha1/groups/<string>/subgroup_requests").methods("GET"_method)(
+	  [&](const crow::request& req, const std::string& groupID){ return getSubgroupRequests(store,req,groupID); });
+	CROW_ROUTE(server, "/v1alpha1/groups/<string>/subgroup_requests/<string>").methods("PUT"_method)(
+	  [&](const crow::request& req, const std::string& pGroup, const std::string& cGroup){ return createGroup(store,req,pGroup,cGroup); });
+	CROW_ROUTE(server, "/v1alpha1/groups/<string>/subgroup_requests/<string>").methods("DELETE"_method)(
+	  [&](const crow::request& req, const std::string& pGroup, const std::string& cGroup){ return denySubgroupRequest(store,req,pGroup,cGroup); });
+	CROW_ROUTE(server, "/v1alpha1/groups/<string>/subgroup_requests/<string>/approve").methods("PUT"_method)(
+	  [&](const crow::request& req, const std::string& pGroup, const std::string& cGroup){ return approveSubgroupRequest(store,req,pGroup,cGroup); });
 	CROW_ROUTE(server, "/v1alpha1/fields_of_science").methods("GET"_method)(
 	  [&](const crow::request& req){ return getScienceFields(store,req); });
 	

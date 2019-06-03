@@ -36,8 +36,8 @@ bool operator!=(const User& u1, const User& u2);
 std::ostream& operator<<(std::ostream& os, const User& u);
 
 struct Group{
-	Group():valid(false){}
-	explicit Group(std::string name):valid(true),name(std::move(name)){}
+	Group():valid(false),pending(false){}
+	explicit Group(std::string name):valid(true),name(std::move(name)),pending(false){}
 	
 	///Indicates whether the Group exists/is valid
 	bool valid;
@@ -47,6 +47,8 @@ struct Group{
 	std::string phone;
 	std::string scienceField;
 	std::string description;
+	///The group is in a requested state but does not yet exist
+	bool pending;
 	
 	explicit operator bool() const{ return valid; }
 };
@@ -60,6 +62,41 @@ template<>
 struct hash<Group>{
 	using result_type=std::size_t;
 	using argument_type=Group;
+	result_type operator()(const argument_type& a) const{
+		return(std::hash<std::string>{}(a.name));
+	}
+};
+};
+
+struct GroupRequest{
+	GroupRequest():valid(false){}
+	GroupRequest(const Group& g, const std::string& requester):
+	name(g.name),displayName(g.displayName),email(g.email),phone(g.phone),
+	scienceField(g.scienceField),description(g.description),requester(requester)
+	{}
+	
+	bool valid;
+	std::string name;
+	std::string displayName;
+	std::string email;
+	std::string phone;
+	std::string scienceField;
+	std::string description;
+	std::string requester;
+	
+	explicit operator bool() const{ return valid; }
+};
+
+///Compare group creation requests by ID.
+///Requests share the same ID space as created groups. 
+bool operator==(const GroupRequest& g1, const GroupRequest& g2);
+std::ostream& operator<<(std::ostream& os, const GroupRequest& group);
+
+namespace std{
+template<>
+struct hash<GroupRequest>{
+	using result_type=std::size_t;
+	using argument_type=GroupRequest;
 	result_type operator()(const argument_type& a) const{
 		return(std::hash<std::string>{}(a.name));
 	}
