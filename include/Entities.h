@@ -42,6 +42,7 @@ struct Group{
 	///Indicates whether the Group exists/is valid
 	bool valid;
 	std::string name;
+	std::string displayName;
 	std::string email;
 	std::string phone;
 	std::string scienceField;
@@ -63,7 +64,7 @@ struct hash<Group>{
 		return(std::hash<std::string>{}(a.name));
 	}
 };
-}
+};
 
 struct GroupMembership{
 	GroupMembership():valid(false),state(NonMember){}

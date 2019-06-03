@@ -372,6 +372,7 @@ void PersistentStore::InitializeGroupTable(){
 			try{
 				Group rootGroup;
 				rootGroup.name="root";
+				rootGroup.displayName="Root Group";
 				rootGroup.email="none";
 				rootGroup.phone="none";
 				rootGroup.scienceField="ResourceProvider";
@@ -979,6 +980,7 @@ bool PersistentStore::addGroup(const Group& group){
 	                              .WithTableName(groupTableName)
 	                              .WithItem({{"name",AV(group.name)},
 	                                         {"sortKey",AV(group.name)},
+	                                         {"displayName",AV(group.displayName)},
 	                                         {"email",AV(group.email)},
 	                                         {"phone",AV(group.phone)},
 	                                         {"scienceField",AV(group.scienceField)},
@@ -1033,6 +1035,7 @@ bool PersistentStore::updateGroup(const Group& group){
 	                                 .WithKey({{"name",AV(group.name)},
 	                                           {"sortKey",AV(group.name)}})
 	                                 .WithAttributeUpdates({
+	                                            {"displayName",AVU().WithValue(AV(group.displayName))},
 	                                            {"email",AVU().WithValue(AV(group.email))},
 	                                            {"phone",AVU().WithValue(AV(group.phone))},
 	                                            {"scienceField",AVU().WithValue(AV(group.scienceField))},
@@ -1145,6 +1148,7 @@ std::vector<Group> PersistentStore::listGroups(){
 			Group group;
 			group.valid=true;
 			group.name=findOrThrow(item,"name","Group record missing name attribute").GetS();
+			group.displayName=findOrThrow(item,"displayName","Group record missing displayName attribute").GetS();
 			group.email=findOrThrow(item,"email","Group record missing email attribute").GetS();
 			group.phone=findOrThrow(item,"phone","Group record missing phone attribute").GetS();
 			group.scienceField=findOrThrow(item,"scienceField","Group record missing field of science attribute").GetS();
@@ -1191,6 +1195,7 @@ Group PersistentStore::getGroup(const std::string& groupName){
 	Group group;
 	group.valid=true;
 	group.name=groupName;
+	group.displayName=findOrThrow(item,"email","Group record missing displayName attribute").GetS();
 	group.email=findOrThrow(item,"email","Group record missing email attribute").GetS();
 	group.phone=findOrThrow(item,"phone","Group record missing phone attribute").GetS();
 	group.scienceField=findOrThrow(item,"scienceField","Group record missing field of science attribute").GetS();

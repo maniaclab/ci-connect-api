@@ -105,6 +105,14 @@ std::string canonicalizeGroupName(std::string name, const std::string& enclosing
 	return enclosingGroup+"."+name;
 }
 
+///\return baz from root.foo.bar.baz
+std::string lastGroupComponent(const std::string& groupName){
+	auto pos=groupName.rfind('.');
+	if(pos==std::string::npos || pos==groupName.size()-1) //no dots so keep everything
+		return groupName;
+	return groupName.substr(pos+1);
+}
+
 crow::response listGroups(PersistentStore& store, const crow::request& req){
 	const User user=authenticateUser(store, req.url_params.get("token"));
 	log_info(user << " requested to list groups");
@@ -128,6 +136,7 @@ crow::response listGroups(PersistentStore& store, const crow::request& req){
 	for (const Group& group : vos){
 		rapidjson::Value groupResult(rapidjson::kObjectType);
 		groupResult.AddMember("name", group.name, alloc);
+		groupResult.AddMember("display_name", group.displayName, alloc);
 		groupResult.AddMember("email", group.email, alloc);
 		groupResult.AddMember("phone", group.phone, alloc);
 		groupResult.AddMember("field_of_science", group.scienceField, alloc);
@@ -182,6 +191,9 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	if(canonicalizeGroupName(body["metadata"]["name"].GetString(),parentGroupName)!=newGroupName)
 		return crow::response(400,generateError("Group name in request does not match target URL path"));
 	
+	if(body["metadata"].HasMember("display_name") && !body["metadata"]["display_name"].IsString())
+		return crow::response(400,generateError("Incorrect type for Group display name"));
+	
 	if(body["metadata"].HasMember("email") && !body["metadata"]["email"].IsString())
 		return crow::response(400,generateError("Incorrect type for Group email"));
 	if(body["metadata"].HasMember("phone") && !body["metadata"]["phone"].IsString())
@@ -201,6 +213,20 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	group.name=newGroupName;
 	if(group.name.empty())
 		return crow::response(400,generateError("Group names may not be the empty string"));
+	
+	if(body["metadata"].HasMember("display_name")){
+		log_info("Getting display name from request");
+		group.displayName=body["metadata"]["display_name"].GetString();
+		if(group.displayName.empty()){
+			log_info("requested name is empty, replacing with last component of FQGN");
+			group.displayName=lastGroupComponent(group.name);
+		}
+	}
+	else{
+		log_info("no name requested, using last component of FQGN");
+		group.displayName=lastGroupComponent(group.name);
+	}
+	log_info("Group display name will be " << group.displayName);
 	
 	if(body["metadata"].HasMember("email"))
 		group.email=body["metadata"]["email"].GetString();
@@ -260,11 +286,12 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	result.AddMember("apiVersion", "v1alpha3", alloc);
 	result.AddMember("kind", "Group", alloc);
 	rapidjson::Value metadata(rapidjson::kObjectType);
-	metadata.AddMember("name", rapidjson::StringRef(group.name.c_str()), alloc);
-	metadata.AddMember("email", rapidjson::StringRef(group.email.c_str()), alloc);
-	metadata.AddMember("phone", rapidjson::StringRef(group.phone.c_str()), alloc);
-	metadata.AddMember("field_of_science", rapidjson::StringRef(group.scienceField.c_str()), alloc);
-	metadata.AddMember("description", rapidjson::StringRef(group.description.c_str()), alloc);
+	metadata.AddMember("name", group.name, alloc);
+	metadata.AddMember("display_name", group.displayName, alloc);
+	metadata.AddMember("email", group.email, alloc);
+	metadata.AddMember("phone", group.phone, alloc);
+	metadata.AddMember("field_of_science", group.scienceField, alloc);
+	metadata.AddMember("description", group.description, alloc);
 	result.AddMember("metadata", metadata, alloc);
 	
 	return crow::response(to_string(result));
@@ -288,11 +315,12 @@ crow::response getGroupInfo(PersistentStore& store, const crow::request& req, st
 	
 	result.AddMember("apiVersion", "v1alpha3", alloc);
 	rapidjson::Value metadata(rapidjson::kObjectType);
-	metadata.AddMember("name", rapidjson::StringRef(group.name.c_str()), alloc);
-	metadata.AddMember("email", rapidjson::StringRef(group.email.c_str()), alloc);
-	metadata.AddMember("phone", rapidjson::StringRef(group.phone.c_str()), alloc);
-	metadata.AddMember("field_of_science", rapidjson::StringRef(group.scienceField.c_str()), alloc);
-	metadata.AddMember("description", rapidjson::StringRef(group.description.c_str()), alloc);
+	metadata.AddMember("name", group.name, alloc);
+	metadata.AddMember("display_name", group.displayName, alloc);
+	metadata.AddMember("email", group.email, alloc);
+	metadata.AddMember("phone", group.phone, alloc);
+	metadata.AddMember("field_of_science", group.scienceField, alloc);
+	metadata.AddMember("description", group.description, alloc);
 	result.AddMember("kind", "Group", alloc);
 	result.AddMember("metadata", metadata, alloc);
 	
@@ -330,6 +358,12 @@ crow::response updateGroup(PersistentStore& store, const crow::request& req, std
 		return crow::response(400,generateError("Incorrect type for metadata"));
 		
 	bool doUpdate=false;
+	if(body["metadata"].HasMember("display_name")){
+		if(!body["metadata"]["display_name"].IsString())
+			return crow::response(400,generateError("Incorrect type for display name"));	
+		targetGroup.displayName=body["metadata"]["display_name"].GetString();
+		doUpdate=true;
+	}
 	if(body["metadata"].HasMember("email")){
 		if(!body["metadata"]["email"].IsString())
 			return crow::response(400,generateError("Incorrect type for email"));	
@@ -474,6 +508,7 @@ crow::response getSubgroups(PersistentStore& store, const crow::request& req, st
 			continue;
 		rapidjson::Value groupResult(rapidjson::kObjectType);
 		groupResult.AddMember("name", group.name, alloc);
+		groupResult.AddMember("display_name", group.displayName, alloc);
 		groupResult.AddMember("email", group.email, alloc);
 		groupResult.AddMember("phone", group.phone, alloc);
 		groupResult.AddMember("field_of_science", group.scienceField, alloc);

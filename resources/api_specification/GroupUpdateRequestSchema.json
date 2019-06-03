@@ -15,6 +15,9 @@
     "metadata": {
       "type": "object",
       "properties": {
+        "display_name": {
+          "type": "string"
+        },
         "field_of_science": {
           "type": "string"
         },

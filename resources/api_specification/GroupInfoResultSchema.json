@@ -18,6 +18,9 @@
         "name": {
           "type": "string"
         },
+        "display_name": {
+          "type": "string"
+        },
         "field_of_science": {
           "type": "string"
         },
@@ -31,7 +34,7 @@
           "type": "string"
         }
       },
-      "required": ["name","field_of_science","email","phone","description"]
+      "required": ["name","display_name","field_of_science","email","phone","description"]
     }
   },
   "required": ["apiVersion","kind","metadata"]
