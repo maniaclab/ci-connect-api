@@ -8,14 +8,13 @@
       "type": "string",
       "enum": [ "v1alpha1" ]
     },
-    "kind": {
-      "type": "string",
-      "enum": [ "Group" ]
-    },
     "metadata": {
       "type": "object",
       "properties": {
         "name": {
+          "type": "string"
+        },
+        "display_name": {
           "type": "string"
         },
         "field_of_science": {
@@ -31,8 +30,8 @@
           "type": "string"
         }
       },
-      "required": ["name","field_of_science","email","phone","description"]
+      "required": ["name","field_of_science"]
     }
   },
-  "required": ["apiVersion","kind","metadata"]
+  "required": ["apiVersion","metadata"]
 }
