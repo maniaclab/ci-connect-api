@@ -130,7 +130,7 @@ crow::response listGroups(PersistentStore& store, const crow::request& req){
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
 	
-	result.AddMember("apiVersion", "v1alpha3", alloc);
+	result.AddMember("apiVersion", "v1alpha1", alloc);
 	rapidjson::Value resultItems(rapidjson::kArrayType);
 	resultItems.Reserve(vos.size(), alloc);
 	for (const Group& group : vos){
@@ -255,7 +255,7 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		group.description=" "; //Dynamo will get upset if a string is empty
 	
 	//if the user is a superuser or group admin, we just go ahead with creating the group
-	if(!user.superuser && store.userStatusInGroup(user.id,parentGroup.name).state!=GroupMembership::Admin){
+	if(user.superuser || store.userStatusInGroup(user.id,parentGroup.name).state==GroupMembership::Admin){
 		group.valid=true;
 	
 		log_info("Creating Group " << group);
@@ -314,7 +314,7 @@ crow::response getGroupInfo(PersistentStore& store, const crow::request& req, st
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
 	
-	result.AddMember("apiVersion", "v1alpha3", alloc);
+	result.AddMember("apiVersion", "v1alpha1", alloc);
 	rapidjson::Value metadata(rapidjson::kObjectType);
 	metadata.AddMember("name", group.name, alloc);
 	metadata.AddMember("display_name", group.displayName, alloc);
@@ -448,7 +448,7 @@ crow::response listGroupMembers(PersistentStore& store, const crow::request& req
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
 	
-	result.AddMember("apiVersion", "v1alpha3", alloc);
+	result.AddMember("apiVersion", "v1alpha1", alloc);
 	rapidjson::Value resultItems(rapidjson::kArrayType);
 	resultItems.Reserve(memberships.size(), alloc);
 	for(const auto& membership : memberships){
@@ -475,7 +475,7 @@ crow::response getGroupMemberStatus(PersistentStore& store, const crow::request&
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
 	
-	result.AddMember("apiVersion", "v1alpha3", alloc);
+	result.AddMember("apiVersion", "v1alpha1", alloc);
 	rapidjson::Value data(rapidjson::kObjectType);
 	data.AddMember("user_id", membership.userID, alloc);
 	data.AddMember("state", GroupMembership::to_string(membership.state), alloc);
@@ -502,7 +502,7 @@ crow::response getSubgroups(PersistentStore& store, const crow::request& req, st
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
 	
-	result.AddMember("apiVersion", "v1alpha3", alloc);
+	result.AddMember("apiVersion", "v1alpha1", alloc);
 	rapidjson::Value resultItems(rapidjson::kArrayType);
 	for (const Group& group : allGroups){
 		if(group.name.find(filterPrefix)!=0)
@@ -538,7 +538,7 @@ crow::response getSubgroupRequests(PersistentStore& store, const crow::request& 
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
 	
-	result.AddMember("apiVersion", "v1alpha3", alloc);
+	result.AddMember("apiVersion", "v1alpha1", alloc);
 	rapidjson::Value resultItems(rapidjson::kArrayType);
 	for (const GroupRequest& group : allGroups){
 		if(group.name.find(filterPrefix)!=0)
@@ -569,12 +569,32 @@ crow::response approveSubgroupRequest(PersistentStore& store, const crow::reques
 	if(!user.superuser && store.userStatusInGroup(user.id,parentGroupName).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
 	
-	newGroupName=canonicalizeGroupName(newGroupName);
+	newGroupName=canonicalizeGroupName(newGroupName,parentGroupName);
 	Group newGroup = store.getGroup(newGroupName);
 	if(!newGroup.pending)
 		return crow::response(400,generateError("Group already exists"));
 	
+	GroupRequest newGroupRequest = store.getGroupRequest(newGroupName);
+	
+	log_info("Approving creation of subgroup " << newGroupName);
 	bool success=store.approveGroupRequest(newGroupName);
+	
+	GroupMembership initialAdmin;
+	initialAdmin.userID=newGroupRequest.requester;
+	initialAdmin.groupName=newGroupRequest.name;
+	initialAdmin.state=GroupMembership::Admin;
+	initialAdmin.stateSetBy=user.id;
+	initialAdmin.valid=true;
+	bool added=store.setUserStatusInGroup(initialAdmin);
+	if(!added){
+		//TODO: possible problem: If we get here, we may end up with a valid group
+		//but with no members
+		auto problem="Failed to add creating user "+
+					 boost::lexical_cast<std::string>(user)+" to new Group "+
+					 boost::lexical_cast<std::string>(newGroupRequest);
+		log_error(problem);
+		return crow::response(500,generateError(problem));
+	}
 	
 	if (!success)
 		return crow::response(500, generateError("Storing group request approval failed"));
@@ -610,7 +630,7 @@ crow::response getScienceFields(PersistentStore& store, const crow::request& req
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
 	
-	result.AddMember("apiVersion", "v1alpha3", alloc);
+	result.AddMember("apiVersion", "v1alpha1", alloc);
 	rapidjson::Value resultItems(rapidjson::kArrayType);
 	for (const auto& field : scienceFields){
 		rapidjson::Value item(rapidjson::kStringType);

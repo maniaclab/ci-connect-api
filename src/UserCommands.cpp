@@ -462,17 +462,23 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 						   const std::string& uID, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
 	log_info(user << " requested to add " << uID << " to " << groupName);
-	if(!user)
+	if(!user){
+		log_warn(user << " does not exist");
 		return crow::response(403,generateError("Not authorized"));
+	}
 	
 	User targetUser=store.getUser(uID);
-	if(!targetUser)
+	if(!targetUser){
+		log_warn(targetUser << " does not exist");
 		return crow::response(404,generateError("User not found"));
+	}
 	
 	groupName=canonicalizeGroupName(groupName);
 	Group group=store.getGroup(groupName);
-	if(!group)
+	if(!group){
+		log_warn(group << " does not exist");
 		return(crow::response(404,generateError("Group not found")));
+	}
 		
 	rapidjson::Document body;
 	try{
@@ -520,8 +526,8 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 		case GroupMembership::Pending:
 			if(currentStatus.state!=GroupMembership::NonMember)
 				return crow::response(400,generateError("Only non-members can be placed in pending membership status"));
-			if(!user.superuser && !requesterIsGroupAdmin && !requesterIsEnclosingGroupAdmin)
-				return crow::response(403,generateError("Not authorized"));
+			//if(!user.superuser && !requesterIsGroupAdmin && !requesterIsEnclosingGroupAdmin)
+			//	return crow::response(403,generateError("Not authorized"));
 			break; //allowed
 		case GroupMembership::Active: //fallthrough
 		case GroupMembership::Admin:
