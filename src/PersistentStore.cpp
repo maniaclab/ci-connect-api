@@ -728,9 +728,9 @@ std::vector<User> PersistentStore::listUsers(){
 	databaseScans++;
 	Aws::DynamoDB::Model::ScanRequest request;
 	request.SetTableName(userTableName);
-	//request.SetAttributesToGet({"ID","name","email"});
-	request.SetFilterExpression("attribute_not_exists(#groupID)");
-	request.SetExpressionAttributeNames({{"#groupID", "groupID"}});
+	//Ignore group membership records
+	request.SetFilterExpression("attribute_not_exists(#groupName)");
+	request.SetExpressionAttributeNames({{"#groupName", "groupName"}});
 	bool keepGoing=false;
 	
 	do{
@@ -761,7 +761,7 @@ std::vector<User> PersistentStore::listUsers(){
 			user.token=findOrThrow(item,"token","user record missing token attribute").GetS();
 			user.globusID=findOrThrow(item,"globusID","user record missing globusID attribute").GetS();
 			user.sshKey=findOrThrow(item,"sshKey","user record missing sshKey attribute").GetS();
-			user.unixName=findOrThrow(item,"sshKey","user record missing unixName attribute").GetS();
+			user.unixName=findOrThrow(item,"unixName","user record missing unixName attribute").GetS();
 			user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
 			user.serviceAccount=findOrThrow(item,"serviceAccount","user record missing serviceAccount attribute").GetBool();
 			collected.push_back(user);
