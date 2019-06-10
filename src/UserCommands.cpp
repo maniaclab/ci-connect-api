@@ -519,10 +519,16 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 			requesterIsEnclosingGroupAdmin=true;
 	}
 	
+	//check whether the target user belongs to the enclosing group
+	std::string enclosingGroupName=enclosingGroup(group.name);
+	if(enclosingGroupName!=group.name &&
+	   !store.userStatusInGroup(targetUser.id,enclosingGroupName).isMember())
+		return crow::response(400,generateError("Cannot modify user status in group: Target user is not a member of the enclosing group"));
+	
 	//Figure out whether the requested transition is allowed
 	switch(membership.state){
 		case GroupMembership::NonMember:
-			return crow::response(400,generateError("Only status cannot be set to non-member"));
+			return crow::response(400,generateError("User status cannot be explicitly set to non-member"));
 		case GroupMembership::Pending:
 			if(currentStatus.state!=GroupMembership::NonMember)
 				return crow::response(400,generateError("Only non-members can be placed in pending membership status"));

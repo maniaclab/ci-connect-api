@@ -113,6 +113,14 @@ std::string lastGroupComponent(const std::string& groupName){
 	return groupName.substr(pos+1);
 }
 
+///\pre groupName should be in canonical form
+std::string enclosingGroup(const std::string& groupName){
+	auto pos=groupName.rfind('.');
+	if(pos==std::string::npos || pos==groupName.size()-1) //no dots so keep everything
+		return groupName;
+	return groupName.substr(0,pos);
+}
+
 crow::response listGroups(PersistentStore& store, const crow::request& req){
 	const User user=authenticateUser(store, req.url_params.get("token"));
 	log_info(user << " requested to list groups");

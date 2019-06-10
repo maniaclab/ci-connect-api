@@ -37,4 +37,7 @@ crow::response getScienceFields(PersistentStore& store, const crow::request& req
 
 std::string canonicalizeGroupName(std::string name, const std::string& enclosingGroup="root");
 
+///\pre groupName should be in canonical form
+std::string enclosingGroup(const std::string& groupName);
+
 #endif //SLATE_GroupCOMMANDS_H
