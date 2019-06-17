@@ -29,6 +29,15 @@
         },
         "description": {
           "type": "string"
+        },
+        "PI_name": {
+          "type": "string"
+        },
+        "PI_email": {
+          "type": "string"
+        },
+        "PI_organization": {
+          "type": "string"
         }
       }
     }

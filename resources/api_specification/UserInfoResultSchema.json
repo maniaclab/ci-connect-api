@@ -15,9 +15,6 @@
     "metadata": {
       "type": "object",
       "properties": {
-        "id": {
-          "type": string
-        },
         "name": {
           "type": "string"
         },
@@ -43,6 +40,9 @@
           "type": "boolean"
         },
         "service_account": {
+          "type": "boolean"
+        },
+        "join_date": {
           "type": "boolean"
         },
         "group_memberships": {

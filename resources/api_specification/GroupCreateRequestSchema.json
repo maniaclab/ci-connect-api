@@ -28,9 +28,18 @@
         },
         "description": {
           "type": "string"
+        },
+        "PI_name": {
+          "type": "string"
+        },
+        "PI_email": {
+          "type": "string"
+        },
+        "PI_organization": {
+          "type": "string"
         }
       },
-      "required": ["name","field_of_science"]
+      "required": ["name","field_of_science","PI_name","PI_email","PI_organization"]
     }
   },
   "required": ["apiVersion","metadata"]

@@ -14,7 +14,7 @@ struct User{
 	
 	///Indicates whether the account exists/is valid
 	bool valid;
-	std::string id;
+	std::string unixName;
 	std::string name;
 	std::string email;
 	std::string phone;
@@ -22,7 +22,7 @@ struct User{
 	std::string token;
 	std::string globusID;
 	std::string sshKey;
-	std::string unixName;
+	std::string joinDate;
 	bool superuser;
 	///indicates that the account is used for some type of automation and should
 	///be hidden form other users under typical circumstances
@@ -47,6 +47,10 @@ struct Group{
 	std::string phone;
 	std::string scienceField;
 	std::string description;
+	std::string PIName;
+	std::string PIEmail;
+	std::string PIOrganization;
+	std::string creationDate;
 	///The group is in a requested state but does not yet exist
 	bool pending;
 	
@@ -72,7 +76,8 @@ struct GroupRequest{
 	GroupRequest():valid(false){}
 	GroupRequest(const Group& g, const std::string& requester):
 	name(g.name),displayName(g.displayName),email(g.email),phone(g.phone),
-	scienceField(g.scienceField),description(g.description),requester(requester)
+	scienceField(g.scienceField),description(g.description),PIName(g.PIName),
+	PIEmail(g.PIEmail),PIOrganization(g.PIOrganization),requester(requester)
 	{}
 	
 	bool valid;
@@ -82,6 +87,9 @@ struct GroupRequest{
 	std::string phone;
 	std::string scienceField;
 	std::string description;
+	std::string PIName;
+	std::string PIEmail;
+	std::string PIOrganization;
 	std::string requester;
 	
 	explicit operator bool() const{ return valid; }
@@ -108,7 +116,7 @@ struct GroupMembership{
 	
 	///Indicates whether the record exists/is valid
 	bool valid;
-	std::string userID;
+	std::string userName;
 	std::string groupName;
 	enum Status{
 		NonMember,
@@ -138,7 +146,7 @@ struct hash<GroupMembership>{
 	using argument_type=GroupMembership;
 	result_type operator()(const argument_type& a) const{
 		std::hash<std::string> sHash;
-		return(sHash(a.userID)^sHash(a.groupName));
+		return(sHash(a.userName)^sHash(a.groupName));
 	}
 };
 }

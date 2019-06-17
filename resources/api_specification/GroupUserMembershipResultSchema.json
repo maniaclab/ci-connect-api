@@ -11,7 +11,7 @@
     "membership": {
       "type": "object",
       "properties": {
-        "user_id": {
+        "user_name": {
           "type": "string"
         },
         "state": {
@@ -22,7 +22,7 @@
           "type": "string"
         }
       },
-      "required": ["user_id","state","state_set_by"]
+      "required": ["user_name","state","state_set_by"]
     }
   },
   "required": ["apiVersion","group_membership"]

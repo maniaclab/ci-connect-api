@@ -7,7 +7,7 @@
 #include <boost/archive/iterators/ostream_iterator.hpp>
 
 bool operator==(const User& u1, const User& u2){
-	return(u1.valid==u2.valid && u1.id==u2.id);
+	return(u1.valid==u2.valid && u1.unixName==u2.unixName);
 }
 bool operator!=(const User& u1, const User& u2){
 	return(!(u1==u2));
@@ -16,7 +16,7 @@ bool operator!=(const User& u1, const User& u2){
 std::ostream& operator<<(std::ostream& os, const User& u){
 	if(!u)
 		return os << "invalid user";
-	os << u.id;
+	os << u.unixName;
 	if(!u.name.empty())
 		os << " (" << u.name << ')';
 	return os;
@@ -67,13 +67,13 @@ GroupMembership::Status GroupMembership::from_string(const std::string& status){
 }
 
 bool operator==(const GroupMembership& m1, const GroupMembership& m2){
-	return(m1.valid==m2.valid && m1.userID==m2.userID && m1.groupName==m2.groupName);
+	return(m1.valid==m2.valid && m1.userName==m2.userName && m1.groupName==m2.groupName);
 }
 
 std::ostream& operator<<(std::ostream& os, const GroupMembership& membership){
 	if(!membership)
 		return os << "invalid membership record";
-	os << membership.userID << " memberhip in " << membership.groupName
+	os << membership.userName << " memberhip in " << membership.groupName
 	   << ": " << GroupMembership::to_string(membership.state);
 	return os;
 }

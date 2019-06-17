@@ -13,7 +13,7 @@
       "items": {
         "type": "object",
         "properties": {
-          "id": {
+          "user_name": {
             "type": "string"
           },
           "state": {
@@ -24,7 +24,7 @@
             "type": "string"
           }
         },
-        "required": ["name","state","state_set_by"]
+        "required": ["user_name","state","state_set_by"]
       },
     }
   },

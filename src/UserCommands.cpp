@@ -25,12 +25,12 @@ crow::response listUsers(PersistentStore& store, const crow::request& req){
 		userResult.AddMember("apiVersion", "v1alpha1", alloc);
 		userResult.AddMember("kind", "User", alloc);
 		rapidjson::Value userData(rapidjson::kObjectType);
-		userData.AddMember("id", rapidjson::StringRef(user.id.c_str()), alloc);
 		userData.AddMember("name", rapidjson::StringRef(user.name.c_str()), alloc);
 		userData.AddMember("email", rapidjson::StringRef(user.email.c_str()), alloc);
 		userData.AddMember("phone", rapidjson::StringRef(user.phone.c_str()), alloc);
 		userData.AddMember("institution", rapidjson::StringRef(user.institution.c_str()), alloc);
 		userData.AddMember("unix_name", user.unixName, alloc);
+		userData.AddMember("join_date", user.joinDate, alloc);
 		userResult.AddMember("metadata", userData, alloc);
 		resultItems.PushBack(userResult, alloc);
 	}
@@ -115,11 +115,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 		log_warn("User institution in user creation request was not a string");
 		return crow::response(400,generateError("Incorrect type for user institution"));
 	}
-	if(!body["metadata"].HasMember("public_key")){
-		log_warn("User creation request was missing user public key");
-		return crow::response(400,generateError("Missing user public key in request"));
-	}
-	if(!body["metadata"]["public_key"].IsString()){
+	if(body["metadata"].HasMember("public_key") && !body["metadata"]["public_key"].IsString()){
 		log_warn("User public key in user creation request was not a string");
 		return crow::response(400,generateError("Incorrect type for user public key"));
 	}
@@ -149,7 +145,6 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	}
 	
 	User targetUser;
-	targetUser.id=idGenerator.generateUserID();
 	targetUser.token=idGenerator.generateUserToken();
 	targetUser.globusID=body["metadata"]["globusID"].GetString();
 	targetUser.name=body["metadata"]["name"].GetString();
@@ -160,6 +155,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	targetUser.unixName=body["metadata"]["unix_name"].GetString();
 	targetUser.superuser=body["metadata"]["superuser"].GetBool();
 	targetUser.serviceAccount=body["metadata"]["service_account"].GetBool();
+	targetUser.joinDate=timestamp();
 	targetUser.valid=true;
 	
 	if(store.findUserByGlobusID(targetUser.globusID)){
@@ -181,10 +177,10 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	}
 	
 	GroupMembership baseMembership;
-	baseMembership.userID=targetUser.id;
+	baseMembership.userName=targetUser.unixName;
 	baseMembership.groupName="root"; //the root group
 	baseMembership.state=GroupMembership::Active;
-	baseMembership.stateSetBy=store.getRootUser().id;
+	baseMembership.stateSetBy="user:"+store.getRootUser().unixName;
 	baseMembership.valid=true;
 	if(!store.setUserStatusInGroup(baseMembership))
 		log_error("Failed to add new user to root group");
@@ -194,18 +190,18 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	
 	result.AddMember("apiVersion", "v1alpha1", alloc);
 	rapidjson::Value metadata(rapidjson::kObjectType);
-	metadata.AddMember("id", rapidjson::StringRef(targetUser.id.c_str()), alloc);
-	metadata.AddMember("name", rapidjson::StringRef(targetUser.name.c_str()), alloc);
-	metadata.AddMember("email", rapidjson::StringRef(targetUser.email.c_str()), alloc);
-	metadata.AddMember("phone", rapidjson::StringRef(targetUser.phone.c_str()), alloc);
-	metadata.AddMember("institution", rapidjson::StringRef(targetUser.institution.c_str()), alloc);
-	metadata.AddMember("access_token", rapidjson::StringRef(targetUser.token.c_str()), alloc);
-	metadata.AddMember("public_key", rapidjson::StringRef(targetUser.sshKey.c_str()), alloc);
-	metadata.AddMember("unix_name", rapidjson::StringRef(targetUser.unixName.c_str()), alloc);
+	metadata.AddMember("name", targetUser.name, alloc);
+	metadata.AddMember("email", targetUser.email, alloc);
+	metadata.AddMember("phone", targetUser.phone, alloc);
+	metadata.AddMember("institution", targetUser.institution, alloc);
+	metadata.AddMember("access_token", targetUser.token, alloc);
+	metadata.AddMember("public_key", targetUser.sshKey, alloc);
+	metadata.AddMember("join_date", targetUser.joinDate, alloc);
+	metadata.AddMember("unix_name", targetUser.unixName, alloc);
 	metadata.AddMember("superuser", targetUser.superuser, alloc);
 	metadata.AddMember("service_account", targetUser.serviceAccount, alloc);
 	rapidjson::Value groupMemberships(rapidjson::kArrayType);
-	std::vector<GroupMembership> groupMembershipList = store.getUserGroupMemberships(targetUser.id);
+	std::vector<GroupMembership> groupMembershipList = store.getUserGroupMemberships(targetUser.unixName);
 	for (auto group : groupMembershipList) {
 		rapidjson::Value entry(rapidjson::kObjectType);
 		entry.AddMember("name", group.groupName, alloc);
@@ -226,7 +222,7 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//users can only be examined by admins or themselves
-	if(!user.superuser && user.id!=uID)
+	if(!user.superuser && user.unixName!=uID)
 		return crow::response(403,generateError("Not authorized"));
 	
 	User targetUser=store.getUser(uID);
@@ -239,14 +235,14 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 	result.AddMember("apiVersion", "v1alpha1", alloc);
 	result.AddMember("kind", "User", alloc);
 	rapidjson::Value metadata(rapidjson::kObjectType);
-	metadata.AddMember("id", rapidjson::StringRef(targetUser.id.c_str()), alloc);
-	metadata.AddMember("name", rapidjson::StringRef(targetUser.name.c_str()), alloc);
-	metadata.AddMember("email", rapidjson::StringRef(targetUser.email.c_str()), alloc);
-	metadata.AddMember("phone", rapidjson::StringRef(targetUser.phone.c_str()), alloc);
-	metadata.AddMember("institution", rapidjson::StringRef(targetUser.institution.c_str()), alloc);
-	metadata.AddMember("access_token", rapidjson::StringRef(targetUser.token.c_str()), alloc);
-	metadata.AddMember("public_key", rapidjson::StringRef(targetUser.sshKey.c_str()), alloc);
-	metadata.AddMember("unix_name", rapidjson::StringRef(targetUser.unixName.c_str()), alloc);
+	metadata.AddMember("name", targetUser.name, alloc);
+	metadata.AddMember("email", targetUser.email, alloc);
+	metadata.AddMember("phone", targetUser.phone, alloc);
+	metadata.AddMember("institution", targetUser.institution, alloc);
+	metadata.AddMember("access_token", targetUser.token, alloc);
+	metadata.AddMember("public_key", targetUser.sshKey, alloc);
+	metadata.AddMember("unix_name", targetUser.unixName, alloc);
+	metadata.AddMember("join_date", targetUser.joinDate, alloc);
 	metadata.AddMember("superuser", targetUser.superuser, alloc);
 	metadata.AddMember("service_account", targetUser.serviceAccount, alloc);
 	rapidjson::Value groupMemberships(rapidjson::kArrayType);
@@ -271,7 +267,7 @@ crow::response updateUser(PersistentStore& store, const crow::request& req, cons
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//users can only be altered by admins and themselves
-	if(!user.superuser && user.id!=uID)
+	if(!user.superuser && user.unixName!=uID)
 		return crow::response(403,generateError("Not authorized"));
 	
 	User targetUser=store.getUser(uID);
@@ -320,11 +316,6 @@ crow::response updateUser(PersistentStore& store, const crow::request& req, cons
 			return crow::response(400,generateError("Incorrect type for user public key"));
 		updatedUser.sshKey=body["metadata"]["public_key"].GetString();
 	}
-	if(body["metadata"].HasMember("unix_name")){
-		if(!body["metadata"]["unix_name"].IsString())
-			return crow::response(400,generateError("Incorrect type for user unix name key"));
-		updatedUser.unixName=body["metadata"]["unix_name"].GetString();
-	}
 	if(body["metadata"].HasMember("superuser")){
 		if(!body["metadata"]["superuser"].IsBool())
 			return crow::response(400,generateError("Incorrect type for user superuser flag"));
@@ -332,12 +323,6 @@ crow::response updateUser(PersistentStore& store, const crow::request& req, cons
 			return crow::response(403,generateError("Not authorized"));
 		if(user.superuser)
 			updatedUser.superuser=body["metadata"]["superuser"].GetBool();
-	}
-	
-	if(updatedUser.unixName!=targetUser.unixName && 
-	   store.unixNameInUse(updatedUser.unixName)){
-		log_warn("User unix name is already in use");
-		return crow::response(400,generateError("Unix name is already in use"));
 	}
 	
 	log_info("Updating " << targetUser << " info");
@@ -354,11 +339,11 @@ crow::response deleteUser(PersistentStore& store, const crow::request& req, cons
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//users can only be deleted by admins or themselves
-	if(!user.superuser && user.id!=uID)
+	if(!user.superuser && user.unixName!=uID)
 		return crow::response(403,generateError("Not authorized"));
 	
 	User targetUser;
-	if(user.id==uID)
+	if(user.unixName==uID)
 		targetUser=user;
 	else{
 		targetUser=store.getUser(uID);
@@ -385,7 +370,7 @@ crow::response listUserGroups(PersistentStore& store, const crow::request& req, 
 		return crow::response(403,generateError("Not authorized"));
 	
 	User targetUser;
-	if(user.id==uID)
+	if(user.unixName==uID)
 		targetUser=user;
 	else{
 		User targetUser=store.getUser(uID);
@@ -432,7 +417,7 @@ namespace{
 	///specified one, and if not, add them. This bypasses pending states, etc.
 	///so it should only be applied when the user becomes an active member, not
 	///pending or disabled. 
-	bool ensureEnclosingMembership(PersistentStore& store, const std::string& userID, std::string groupName, const std::string& stateSetBy){
+	/*bool ensureEnclosingMembership(PersistentStore& store, const std::string& userID, std::string groupName, const std::string& stateSetBy){
 		while(!groupName.empty()){
 			auto sepPos=groupName.rfind('.');
 			if(sepPos==std::string::npos)
@@ -444,7 +429,7 @@ namespace{
 			if(!store.userStatusInGroup(userID,groupName).isMember()){
 				//is the user is not already a member at this level, add them
 				GroupMembership membership;
-				membership.userID=userID;
+				membership.userName=userID;
 				membership.groupName=groupName;
 				membership.stateSetBy=stateSetBy;
 				membership.state=GroupMembership::Active; //always as a normal member
@@ -455,7 +440,7 @@ namespace{
 			}
 		}
 		return true;
-	}
+	}*/
 }
 
 crow::response setUserStatusInGroup(PersistentStore& store, const crow::request& req, 
@@ -494,9 +479,9 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 		return crow::response(400,generateError("Incorrect type for group_membership"));
 	
 	GroupMembership membership;
-	membership.userID=targetUser.id;
+	membership.userName=targetUser.unixName;
 	membership.groupName=group.name;
-	membership.stateSetBy=user.id;
+	membership.stateSetBy="user:"+user.unixName;
 	
 	if(body["group_membership"].HasMember("state")){
 		if(!body["group_membership"]["state"].IsString())
@@ -504,17 +489,17 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 		membership.state=GroupMembership::from_string(body["group_membership"]["state"].GetString());
 	}
 	
-	auto currentStatus=store.userStatusInGroup(targetUser.id,group.name);
+	auto currentStatus=store.userStatusInGroup(targetUser.unixName,group.name);
 	if(membership.state==currentStatus.state) //no-op
 		return(crow::response(200));
 	bool selfRequest=(user==targetUser);
-	bool requesterIsGroupAdmin=(store.userStatusInGroup(user.id,groupName).state==GroupMembership::Admin);
+	bool requesterIsGroupAdmin=(store.userStatusInGroup(user.unixName,groupName).state==GroupMembership::Admin);
 	bool requesterIsEnclosingGroupAdmin=false;
 	std::string adminGroup;
 	if(requesterIsGroupAdmin)
 		adminGroup=groupName;
 	else{
-		adminGroup=adminInAnyEnclosingGroup(store,user.id,group.name);
+		adminGroup=adminInAnyEnclosingGroup(store,user.unixName,group.name);
 		if(!adminGroup.empty())
 			requesterIsEnclosingGroupAdmin=true;
 	}
@@ -522,7 +507,7 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 	//check whether the target user belongs to the enclosing group
 	std::string enclosingGroupName=enclosingGroup(group.name);
 	if(enclosingGroupName!=group.name &&
-	   !store.userStatusInGroup(targetUser.id,enclosingGroupName).isMember())
+	   !store.userStatusInGroup(targetUser.unixName,enclosingGroupName).isMember())
 		return crow::response(400,generateError("Cannot modify user status in group: Target user is not a member of the enclosing group"));
 	
 	//Figure out whether the requested transition is allowed
@@ -553,7 +538,7 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 				return crow::response(400,generateError("Only members can be placed in disabled membership status"));
 			if(!user.superuser && !requesterIsGroupAdmin && !requesterIsEnclosingGroupAdmin)
 				return crow::response(403,generateError("Not authorized"));
-			membership.stateSetBy=adminGroup;
+			membership.stateSetBy="group:"+adminGroup;
 			break; //allowed
 	}
 	
@@ -564,8 +549,8 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 	if(!success)
 		return crow::response(500,generateError("User addition to Group failed"));
 	
-	if(membership.isMember())
-		ensureEnclosingMembership(store,membership.userID,membership.groupName,membership.stateSetBy);	
+	//if(membership.isMember())
+	//	ensureEnclosingMembership(store,membership.userName,membership.groupName,membership.stateSetBy);	
 	
 	return(crow::response(200));
 }
@@ -583,8 +568,8 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 	
 	//Only allow superusers and admins of the Group to remove user from it
 	if(!user.superuser && 
-	   store.userStatusInGroup(user.id,groupID).state!=GroupMembership::Admin &&
-	   adminInAnyEnclosingGroup(store,user.id,groupID).empty())
+	   store.userStatusInGroup(user.unixName,groupID).state!=GroupMembership::Admin &&
+	   adminInAnyEnclosingGroup(store,user.unixName,groupID).empty())
 		return crow::response(403,generateError("Not authorized"));
 	
 	log_info("Removing " << targetUser << " from " << groupID);
@@ -617,8 +602,8 @@ crow::response findUser(PersistentStore& store, const crow::request& req){
 	result.AddMember("apiVersion", "v1alpha1", alloc);
 	result.AddMember("kind", "User", alloc);
 	rapidjson::Value metadata(rapidjson::kObjectType);
-	metadata.AddMember("id", rapidjson::StringRef(targetUser.id.c_str()), alloc);
-	metadata.AddMember("access_token", rapidjson::StringRef(targetUser.token.c_str()), alloc);
+	metadata.AddMember("unix_name", targetUser.unixName, alloc);
+	metadata.AddMember("access_token", targetUser.token, alloc);
 	result.AddMember("metadata", metadata, alloc);
 
 	return crow::response(to_string(result));
@@ -654,7 +639,7 @@ crow::response replaceUserToken(PersistentStore& store, const crow::request& req
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//users can only be altered by admins and themselves
-	if(!user.superuser && user.id!=uID)
+	if(!user.superuser && user.unixName!=uID)
 		return crow::response(403,generateError("Not authorized"));
 	
 	User targetUser=store.getUser(uID);
@@ -676,7 +661,7 @@ crow::response replaceUserToken(PersistentStore& store, const crow::request& req
 	result.AddMember("apiVersion", "v1alpha1", alloc);
 	result.AddMember("kind", "User", alloc);
 	rapidjson::Value metadata(rapidjson::kObjectType);
-	metadata.AddMember("id", updatedUser.id, alloc);
+	metadata.AddMember("unix_name", updatedUser.unixName, alloc);
 	metadata.AddMember("access_token", updatedUser.token, alloc);
 	result.AddMember("metadata", metadata, alloc);
 	

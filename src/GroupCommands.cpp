@@ -170,7 +170,7 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		return crow::response(404,generateError("Parent group not found"));
 	//only an admin in the parent group may create child groups
 	//other members may request the creation of child groups
-	if(!user.superuser && !store.userStatusInGroup(user.id,parentGroup.name).isMember())
+	if(!user.superuser && !store.userStatusInGroup(user.unixName,parentGroup.name).isMember())
 		return crow::response(403,generateError("Not authorized"));
 	{
 		Group existingGroup=store.getGroup(newGroupName);
@@ -215,6 +215,21 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		
 	if(body["metadata"].HasMember("description") && !body["metadata"]["description"].IsString())
 		return crow::response(400,generateError("Incorrect type for Group description"));
+	
+	if(!body["metadata"].HasMember("PI_name"))
+		return crow::response(400,generateError("Missing Group PI name in request"));
+	if(!body["metadata"]["PI_name"].IsString())
+		return crow::response(400,generateError("Incorrect type for Group PI name"));
+	
+	if(!body["metadata"].HasMember("PI_email"))
+		return crow::response(400,generateError("Missing Group PI email address in request"));
+	if(!body["metadata"]["PI_email"].IsString())
+		return crow::response(400,generateError("Incorrect type for Group PI email address"));
+	
+	if(!body["metadata"].HasMember("PI_organization"))
+		return crow::response(400,generateError("Missing Group PI organization in request"));
+	if(!body["metadata"]["PI_organization"].IsString())
+		return crow::response(400,generateError("Incorrect type for Group PI organization"));
 	
 	Group group;
 	
@@ -262,8 +277,20 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	if(group.description.empty())
 		group.description=" "; //Dynamo will get upset if a string is empty
 	
+	group.PIName=body["metadata"]["PI_name"].GetString();
+	if(group.PIName.empty())
+		return crow::response(400,generateError("Group PI name may not be the empty string"));
+	group.PIEmail=body["metadata"]["PI_email"].GetString();
+	if(group.PIEmail.empty())
+		return crow::response(400,generateError("Group PI email address may not be the empty string"));
+	group.PIOrganization=body["metadata"]["PI_organization"].GetString();
+	if(group.PIOrganization.empty())
+		return crow::response(400,generateError("Group PI organization name may not be the empty string"));
+	
+	group.creationDate=timestamp();
+	
 	//if the user is a superuser or group admin, we just go ahead with creating the group
-	if(user.superuser || store.userStatusInGroup(user.id,parentGroup.name).state==GroupMembership::Admin){
+	if(user.superuser || store.userStatusInGroup(user.unixName,parentGroup.name).state==GroupMembership::Admin){
 		group.valid=true;
 	
 		log_info("Creating Group " << group);
@@ -273,10 +300,10 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	
 		//Make the creating user an initial member of the group
 		GroupMembership initialAdmin;
-		initialAdmin.userID=user.id;
+		initialAdmin.userName=user.unixName;
 		initialAdmin.groupName=group.name;
 		initialAdmin.state=GroupMembership::Admin;
-		initialAdmin.stateSetBy=user.id;
+		initialAdmin.stateSetBy="user:"+user.unixName;
 		initialAdmin.valid=true;
 		bool added=store.setUserStatusInGroup(initialAdmin);
 		if(!added){
@@ -292,7 +319,7 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		log_info("Created " << group << " on behalf of " << user);
 	}
 	else{ //otherwise, store a group creation request for later approval by an admin
-		GroupRequest gr(group,user.id);
+		GroupRequest gr(group,user.unixName);
 		gr.valid=true;
 		
 		log_info("Storing Group Request for " << gr);
@@ -344,7 +371,7 @@ crow::response updateGroup(PersistentStore& store, const crow::request& req, std
 		
 	groupName=canonicalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser && store.userStatusInGroup(user.id,groupName).state!=GroupMembership::Admin)
+	if(!user.superuser && store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
 	
 	Group targetGroup = store.getGroup(groupName);
@@ -423,7 +450,7 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, std
 		return crow::response(403,generateError("Not authorized"));
 	groupName=canonicalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser && store.userStatusInGroup(user.id,groupName).state!=GroupMembership::Admin)
+	if(!user.superuser && store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
 	
 	Group targetGroup = store.getGroup(groupName);
@@ -461,7 +488,7 @@ crow::response listGroupMembers(PersistentStore& store, const crow::request& req
 	resultItems.Reserve(memberships.size(), alloc);
 	for(const auto& membership : memberships){
 		rapidjson::Value userResult(rapidjson::kObjectType);
-		userResult.AddMember("id", membership.userID, alloc);
+		userResult.AddMember("user_name", membership.userName, alloc);
 		userResult.AddMember("state", GroupMembership::to_string(membership.state), alloc);
 		userResult.AddMember("state_set_by", membership.stateSetBy, alloc);
 		resultItems.PushBack(userResult, alloc);
@@ -485,7 +512,7 @@ crow::response getGroupMemberStatus(PersistentStore& store, const crow::request&
 	
 	result.AddMember("apiVersion", "v1alpha1", alloc);
 	rapidjson::Value data(rapidjson::kObjectType);
-	data.AddMember("user_id", membership.userID, alloc);
+	data.AddMember("user_name", membership.userName, alloc);
 	data.AddMember("state", GroupMembership::to_string(membership.state), alloc);
 	data.AddMember("state_set_by", membership.stateSetBy, alloc);		
 	result.AddMember("membership", data, alloc);
@@ -574,7 +601,7 @@ crow::response approveSubgroupRequest(PersistentStore& store, const crow::reques
 		
 	parentGroupName=canonicalizeGroupName(parentGroupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser && store.userStatusInGroup(user.id,parentGroupName).state!=GroupMembership::Admin)
+	if(!user.superuser && store.userStatusInGroup(user.unixName,parentGroupName).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
 	
 	newGroupName=canonicalizeGroupName(newGroupName,parentGroupName);
@@ -588,10 +615,10 @@ crow::response approveSubgroupRequest(PersistentStore& store, const crow::reques
 	bool success=store.approveGroupRequest(newGroupName);
 	
 	GroupMembership initialAdmin;
-	initialAdmin.userID=newGroupRequest.requester;
+	initialAdmin.userName=newGroupRequest.requester;
 	initialAdmin.groupName=newGroupRequest.name;
 	initialAdmin.state=GroupMembership::Admin;
-	initialAdmin.stateSetBy=user.id;
+	initialAdmin.stateSetBy="user:"+user.unixName;
 	initialAdmin.valid=true;
 	bool added=store.setUserStatusInGroup(initialAdmin);
 	if(!added){
@@ -618,7 +645,7 @@ crow::response denySubgroupRequest(PersistentStore& store, const crow::request& 
 		
 	parentGroupName=canonicalizeGroupName(parentGroupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser && store.userStatusInGroup(user.id,parentGroupName).state!=GroupMembership::Admin)
+	if(!user.superuser && store.userStatusInGroup(user.unixName,parentGroupName).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
 	
 	newGroupName=canonicalizeGroupName(newGroupName);

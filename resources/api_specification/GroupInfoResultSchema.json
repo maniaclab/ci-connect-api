@@ -2,7 +2,6 @@
   "type": "object",
   "$schema": "http://json-schema.org/draft-07/schema",
   "id": "http://jsonschema.net",
-  "required": true,
   "properties": {
     "apiVersion": {
       "type": "string",
@@ -32,9 +31,21 @@
         },
         "description": {
           "type": "string"
+        },
+        "PI_name": {
+          "type": "string"
+        },
+        "PI_email": {
+          "type": "string"
+        },
+        "PI_organization": {
+          "type": "string"
+        },
+        "creation_date": {
+          "type": "string"
         }
       },
-      "required": ["name","display_name","field_of_science","email","phone","description"]
+      "required": ["name","display_name","field_of_science","email","phone","description","PI_name","PI_email","PI_organization","creation_date"]
     }
   },
   "required": ["apiVersion","kind","metadata"]
