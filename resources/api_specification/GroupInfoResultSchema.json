@@ -20,7 +20,7 @@
         "display_name": {
           "type": "string"
         },
-        "field_of_science": {
+        "purpose": {
           "type": "string"
         },
         "email": {
@@ -32,20 +32,11 @@
         "description": {
           "type": "string"
         },
-        "PI_name": {
-          "type": "string"
-        },
-        "PI_email": {
-          "type": "string"
-        },
-        "PI_organization": {
-          "type": "string"
-        },
         "creation_date": {
           "type": "string"
         }
       },
-      "required": ["name","display_name","field_of_science","email","phone","description","PI_name","PI_email","PI_organization","creation_date"]
+      "required": ["name","display_name","purpose","email","phone","description","creation_date"]
     }
   },
   "required": ["apiVersion","kind","metadata"]

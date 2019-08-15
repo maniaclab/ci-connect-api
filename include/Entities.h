@@ -1,6 +1,7 @@
 #ifndef CONNECT_ENTITIES_H
 #define CONNECT_ENTITIES_H
 
+#include <map>
 #include <memory>
 #include <mutex>
 #include <random>
@@ -45,11 +46,8 @@ struct Group{
 	std::string displayName;
 	std::string email;
 	std::string phone;
-	std::string scienceField;
+	std::string purpose;
 	std::string description;
-	std::string PIName;
-	std::string PIEmail;
-	std::string PIOrganization;
 	std::string creationDate;
 	///The group is in a requested state but does not yet exist
 	bool pending;
@@ -76,8 +74,7 @@ struct GroupRequest{
 	GroupRequest():valid(false){}
 	GroupRequest(const Group& g, const std::string& requester):
 	name(g.name),displayName(g.displayName),email(g.email),phone(g.phone),
-	scienceField(g.scienceField),description(g.description),PIName(g.PIName),
-	PIEmail(g.PIEmail),PIOrganization(g.PIOrganization),requester(requester)
+	purpose(g.purpose),description(g.description),requester(requester)
 	{}
 	
 	bool valid;
@@ -85,12 +82,10 @@ struct GroupRequest{
 	std::string displayName;
 	std::string email;
 	std::string phone;
-	std::string scienceField;
+	std::string purpose;
 	std::string description;
-	std::string PIName;
-	std::string PIEmail;
-	std::string PIOrganization;
 	std::string requester;
+	std::map<std::string,std::string> secondaryAttributes;
 	
 	explicit operator bool() const{ return valid; }
 };

@@ -319,6 +319,12 @@ int main(int argc, char* argv[]){
 	  [&](const crow::request& req, const std::string& uID, const std::string groupID){ return setUserStatusInGroup(store,req,uID,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/users/<string>/groups/<string>").methods("DELETE"_method)(
 	  [&](const crow::request& req, const std::string& uID, const std::string groupID){ return removeUserFromGroup(store,req,uID,groupID); });
+	CROW_ROUTE(server, "/v1alpha1/users/<string>/attributes/<string>").methods("GET"_method)(
+	  [&](const crow::request& req, const std::string& uID, const std::string& attr){ return getUserAttribute(store,req,uID,attr); });
+	CROW_ROUTE(server, "/v1alpha1/users/<string>/attributes/<string>").methods("PUT"_method)(
+	  [&](const crow::request& req, const std::string& uID, const std::string& attr){ return setUserAttribute(store,req,uID,attr); });
+	CROW_ROUTE(server, "/v1alpha1/users/<string>/attributes/<string>").methods("DELETE"_method)(
+	  [&](const crow::request& req, const std::string& uID, const std::string& attr){ return deleteUserAttribute(store,req,uID,attr); });
 	CROW_ROUTE(server, "/v1alpha1/users/<string>/replace_token").methods("GET"_method)(
 	  [&](const crow::request& req, const std::string& uID){ return replaceUserToken(store,req,uID); });
 	CROW_ROUTE(server, "/v1alpha1/find_user").methods("GET"_method)(
@@ -355,6 +361,12 @@ int main(int argc, char* argv[]){
 	  [&](const crow::request& req, const std::string& pGroup, const std::string& cGroup){ return denySubgroupRequest(store,req,pGroup,cGroup); });
 	CROW_ROUTE(server, "/v1alpha1/groups/<string>/subgroup_requests/<string>/approve").methods("PUT"_method)(
 	  [&](const crow::request& req, const std::string& pGroup, const std::string& cGroup){ return approveSubgroupRequest(store,req,pGroup,cGroup); });
+	CROW_ROUTE(server, "/v1alpha1/groups/<string>/attributes/<string>").methods("GET"_method)(
+	  [&](const crow::request& req, const std::string& group, const std::string& attr){ return getGroupAttribute(store,req,group,attr); });
+	CROW_ROUTE(server, "/v1alpha1/groups/<string>/attributes/<string>").methods("PUT"_method)(
+	  [&](const crow::request& req, const std::string& group, const std::string& attr){ return setGroupAttribute(store,req,group,attr); });
+	CROW_ROUTE(server, "/v1alpha1/groups/<string>/attributes/<string>").methods("DELETE"_method)(
+	  [&](const crow::request& req, const std::string& group, const std::string& attr){ return deleteGroupAttribute(store,req,group,attr); });
 	CROW_ROUTE(server, "/v1alpha1/fields_of_science").methods("GET"_method)(
 	  [&](const crow::request& req){ return getScienceFields(store,req); });
 	

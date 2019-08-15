@@ -259,6 +259,77 @@ version: v1alpha1
                     "kind": "Error",
                     "message": "User not found"
                   }
+    /attributes:
+      /{attribute_name}:
+        get:
+          description: Get an extra attribute of a user
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          responses:
+            200:
+              description: Success
+              body:
+                application/json:
+                  type: !include UserAttributeResultSchema.json
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description: User or attribute not found
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+        put:
+          description: Set an extra attribute of a user
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          body:
+            application/json:
+              type: !include UserAttributeStoreRequestSchema.json
+          responses:
+            200:
+              description: Success
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description: User not found
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+        delete:
+          description: Remove an extra attribute of a user
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          responses:
+            200:
+              description: Success
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description: User or attribute not found
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
 /find_user:
   get:
     description: Look up a user account by globus ID
@@ -674,6 +745,78 @@ version: v1alpha1
                 body:
                   application/json:
                     type: !include ErrorResultSchema.json
+    /attributes:
+      /{attribute_name}:
+        get:
+          description: Get an extra attribute of a group
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          responses:
+            200:
+              description: Success
+              body:
+                application/json:
+                  type: !include GroupAttributeResultSchema.json
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description: Group or attribute not found
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+        put:
+          description: Set an extra attribute of a group
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          body:
+            application/json:
+              type: !include GroupAttributeStoreRequestSchema.json
+          responses:
+            200:
+              description: Success
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description: Group not found
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+        delete:
+          description: Remove an extra attribute of a group
+          # admins of a group or the directly enclosing group can destroy it
+          queryParameters:
+            token:
+              displayName: Access Token
+              type: string
+              description: User's authentication token
+              required: true
+          responses:
+            200:
+              description: Success
+            403:
+              description: Authentication/authorization error
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
+            404: 
+              description: Group or attribute not found
+              body:
+                application/json:
+                  type: !include ErrorResultSchema.json
 /fields_of_science:
   get:
     description: List of all accepted fields of science

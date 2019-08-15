@@ -18,6 +18,12 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
                                     const std::string& uID, std::string groupID);
 crow::response removeUserFromGroup(PersistentStore& store, const crow::request& req, 
                                    const std::string& uID, std::string groupID);
+crow::response getUserAttribute(PersistentStore& store, const crow::request& req, 
+                                std::string uID, std::string attributeName);
+crow::response setUserAttribute(PersistentStore& store, const crow::request& req, 
+                                std::string uID, std::string attributeName);
+crow::response deleteUserAttribute(PersistentStore& store, const crow::request& req, 
+                                   std::string uID, std::string attributeName);
 crow::response findUser(PersistentStore& store, const crow::request& req);
 crow::response checkUnixName(PersistentStore& store, const crow::request& req);
 crow::response replaceUserToken(PersistentStore& store, const crow::request& req,

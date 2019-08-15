@@ -352,11 +352,8 @@ void PersistentStore::InitializeGroupTable(){
 				rootGroup.displayName="Root Group";
 				rootGroup.email="none";
 				rootGroup.phone="none";
-				rootGroup.scienceField="ResourceProvider";
+				rootGroup.purpose="ResourceProvider";
 				rootGroup.description="Root group which contains all users but is associated with no resources";
-				rootGroup.PIName="none";
-				rootGroup.PIEmail="none";
-				rootGroup.PIOrganization="none";
 				rootGroup.creationDate=timestamp();
 				rootGroup.valid=true;
 				if(!addGroup(rootGroup))
@@ -682,12 +679,54 @@ bool PersistentStore::removeUser(const std::string& id){
 	using Aws::DynamoDB::Model::AttributeValue;
 	auto outcome=dbClient.DeleteItem(Aws::DynamoDB::Model::DeleteItemRequest()
 								     .WithTableName(userTableName)
-								     .WithKey({{"ID",AttributeValue(id)},
+								     .WithKey({{"unixName",AttributeValue(id)},
 	                                           {"sortKey",AttributeValue(id)}}));
 	if(!outcome.IsSuccess()){
 		auto err=outcome.GetError();
 		log_error("Failed to delete user record: " << err.GetMessage());
 		return false;
+	}
+	
+	//clean up any secondary attribute records tied to the user
+	databaseScans++;
+	Aws::DynamoDB::Model::ScanRequest request;
+	request.SetTableName(userTableName);
+	request.SetFilterExpression("attribute_exists(#extra) AND #name = "+id);
+	request.SetExpressionAttributeNames({{"#extra", "secondaryAttribute"},{"#name", "unixName"}});
+	bool keepGoing=false;
+	
+	std::vector<std::string> toDelete;
+	do{
+		auto outcome=dbClient.Scan(request);
+		if(!outcome.IsSuccess()){
+			//TODO: more principled logging or reporting of the nature of the error
+			auto err=outcome.GetError();
+			log_error("Failed to fetch user secondary records: " << err.GetMessage());
+			return false;
+		}
+		const auto& result=outcome.GetResult();
+		//set up fetching the next page if necessary
+		if(!result.GetLastEvaluatedKey().empty()){
+			keepGoing=true;
+			request.SetExclusiveStartKey(result.GetLastEvaluatedKey());
+		}
+		else
+			keepGoing=false;
+		//collect results from this page
+		for(const auto& item : result.GetItems())
+			toDelete.push_back(findOrThrow(item,"sortKey","user secondary record missing sortKey attribute").GetS());
+	}while(keepGoing);
+	
+	for(const auto& sortKey : toDelete){
+		outcome=dbClient.DeleteItem(Aws::DynamoDB::Model::DeleteItemRequest()
+										 .WithTableName(userTableName)
+										 .WithKey({{"unixName",AttributeValue(id)},
+												   {"sortKey",AttributeValue(sortKey)}}));
+		if(!outcome.IsSuccess()){
+			auto err=outcome.GetError();
+			log_error("Failed to delete user record: " << err.GetMessage());
+			return false;
+		}
 	}
 	return true;
 }
@@ -867,6 +906,107 @@ GroupMembership PersistentStore::userStatusInGroup(const std::string& uID, std::
 	return membership;
 }
 
+bool PersistentStore::setUserSecondaryAttribute(const std::string& uID, 
+                                const std::string& attributeName, 
+                                const std::string& attributeValue){
+	if(attributeValue.empty())
+		throw std::runtime_error("Attribute value must not be empty because Dynamo");
+	using AV=Aws::DynamoDB::Model::AttributeValue;
+	auto outcome=dbClient.PutItem(Aws::DynamoDB::Model::PutItemRequest()
+	                              .WithTableName(userTableName)
+	                              .WithItem({{"unixName",AV(uID)},
+	                                         {"sortKey",AV(uID+":attr:"+attributeName)},
+	                                         {"secondaryAttribute",AV(attributeValue)}
+	                              }));
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to add User secondary attribute record: " << err.GetMessage());
+		return false;
+	}
+	
+	//update caches
+	auto record=std::make_pair(attributeName,CacheRecord<std::string>(attributeValue,userCacheValidity));
+	std::map<std::string,CacheRecord<std::string>> m{record};
+	userAttributeCache.upsert(uID,[&](std::map<std::string,CacheRecord<std::string>>& attrs){
+		auto it=attrs.find(record.first);
+		if(it==attrs.end())
+			attrs.insert(record);
+		else
+			it->second=record.second;
+	},m);
+    
+	return true;
+}
+
+std::string PersistentStore::getUserSecondaryAttribute(const std::string& uID, const std::string& attributeName){
+	//first see if we have this cached
+	{
+		CacheRecord<std::string> record;
+		if(userAttributeCache.find_fn(uID,[&](const std::map<std::string,CacheRecord<std::string>>& attrs){
+			auto it=attrs.find(attributeName);
+			if(it!=attrs.end())
+				record=it->second;
+		})){
+			//we have a cached record; is it still valid?
+			if(record){ //it is, just return it
+				cacheHits++;
+				return record;
+			}
+		}
+	}
+	//need to query the database
+	databaseQueries++;
+	log_info("Querying database for user secondary record " << uID << ':' << attributeName);
+	using AV=Aws::DynamoDB::Model::AttributeValue;
+	auto outcome=dbClient.GetItem(Aws::DynamoDB::Model::GetItemRequest()
+								  .WithTableName(userTableName)
+								  .WithKey({{"unixName",AV(uID)},
+	                                        {"sortKey",AV(uID+":attr:"+attributeName)}}));
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to user secondary record: " << err.GetMessage());
+		return std::string{};
+	}
+	const auto& item=outcome.GetResult().GetItem();
+	if(item.empty()) //no match found
+		return std::string{};
+	
+	std::string result=findOrThrow(item,"secondaryAttribute","user secondary record missing attribute").GetS();
+	
+	//update cache
+	auto record=std::make_pair(uID,CacheRecord<std::string>(result,userCacheValidity));
+	std::map<std::string,CacheRecord<std::string>> m{record};
+	userAttributeCache.upsert(uID,[&](std::map<std::string,CacheRecord<std::string>>& attrs){
+		auto it=attrs.find(record.first);
+		if(it==attrs.end())
+			attrs.insert(record);
+		else
+			it->second=record.second;
+	},m);
+	
+	return result;
+}
+
+bool PersistentStore::removeUserSecondaryAttribute(const std::string& uID, const std::string& attributeName){
+	//remove from cache is present there
+	userAttributeCache.erase_fn(uID,[&](std::map<std::string,CacheRecord<std::string>>& attrs){
+		attrs.erase(attributeName);
+		return attrs.empty(); //if the map for this user is empty, remove it entirely
+	});
+	
+	using AV=Aws::DynamoDB::Model::AttributeValue;
+	auto outcome=dbClient.DeleteItem(Aws::DynamoDB::Model::DeleteItemRequest()
+								     .WithTableName(userTableName)
+								     .WithKey({{"unixName",AV(uID)},
+	                                           {"sortKey",AV(uID+":attr:"+attributeName)}}));
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to delete secondary user record record: " << err.GetMessage());
+		return false;
+	}
+	return true;
+}
+
 bool PersistentStore::unixNameInUse(const std::string& name){
 	//TODO: Should this be cached?
 	//need to query the database
@@ -950,8 +1090,8 @@ bool PersistentStore::addGroup(const Group& group){
 		throw std::runtime_error("Group email must not be empty because Dynamo");
 	if(group.phone.empty())
 		throw std::runtime_error("Group phone must not be empty because Dynamo");
-	if(group.scienceField.empty())
-		throw std::runtime_error("Group scienceField must not be empty because Dynamo");
+	if(group.purpose.empty())
+		throw std::runtime_error("Group purpose must not be empty because Dynamo");
 	if(group.description.empty())
 		throw std::runtime_error("Group description must not be empty because Dynamo");
 	using AV=Aws::DynamoDB::Model::AttributeValue;
@@ -962,11 +1102,8 @@ bool PersistentStore::addGroup(const Group& group){
 	                                         {"displayName",AV(group.displayName)},
 	                                         {"email",AV(group.email)},
 	                                         {"phone",AV(group.phone)},
-	                                         {"scienceField",AV(group.scienceField)},
+	                                         {"purpose",AV(group.purpose)},
 	                                         {"description",AV(group.description)},
-	                                         {"PIName",AV(group.PIName)},
-	                                         {"PIEmail",AV(group.PIEmail)},
-	                                         {"PIOrganization",AV(group.PIOrganization)},
 	                                         {"creationDate",AV(group.creationDate)}
 	                              }));
 	if(!outcome.IsSuccess()){
@@ -987,11 +1124,16 @@ bool PersistentStore::addGroupRequest(const GroupRequest& gr){
 		throw std::runtime_error("Group email must not be empty because Dynamo");
 	if(gr.phone.empty())
 		throw std::runtime_error("Group phone must not be empty because Dynamo");
-	if(gr.scienceField.empty())
-		throw std::runtime_error("Group scienceField must not be empty because Dynamo");
+	if(gr.purpose.empty())
+		throw std::runtime_error("Group purpose must not be empty because Dynamo");
 	if(gr.description.empty())
 		throw std::runtime_error("Group description must not be empty because Dynamo");
 	using AV=Aws::DynamoDB::Model::AttributeValue;
+	
+	AV secondary;
+	for(const auto& entry : gr.secondaryAttributes)
+		secondary.AddMEntry(entry.first,std::make_shared<AV>(entry.second));
+	
 	auto outcome=dbClient.PutItem(Aws::DynamoDB::Model::PutItemRequest()
 	                              .WithTableName(groupTableName)
 	                              .WithItem({{"name",AV(gr.name)},
@@ -999,16 +1141,14 @@ bool PersistentStore::addGroupRequest(const GroupRequest& gr){
 	                                         {"displayName",AV(gr.displayName)},
 	                                         {"email",AV(gr.email)},
 	                                         {"phone",AV(gr.phone)},
-	                                         {"scienceField",AV(gr.scienceField)},
+	                                         {"purpose",AV(gr.purpose)},
 	                                         {"description",AV(gr.description)},
-	                                         {"PIName",AV(gr.PIName)},
-	                                         {"PIEmail",AV(gr.PIEmail)},
-	                                         {"PIOrganization",AV(gr.PIOrganization)},
-	                                         {"requester",AV(gr.requester)}
+	                                         {"requester",AV(gr.requester)},
+	                                         {"secondaryAttributes",secondary}
 	                              }));
 	if(!outcome.IsSuccess()){
 		auto err=outcome.GetError();
-		log_error("Failed to add Group record: " << err.GetMessage());
+		log_error("Failed to add Group Request record: " << err.GetMessage());
 		return false;
 	}
 	
@@ -1045,6 +1185,49 @@ bool PersistentStore::removeGroup(const std::string& groupName){
 		log_error("Failed to delete Group record: " << err.GetMessage());
 		return false;
 	}
+	
+	//clean up any secondary attribute records tied to the group
+	databaseScans++;
+	Aws::DynamoDB::Model::ScanRequest request;
+	request.SetTableName(groupTableName);
+	request.SetFilterExpression("attribute_exists(#extra) AND #name = "+groupName);
+	request.SetExpressionAttributeNames({{"#extra", "secondaryAttribute"},{"#name", "name"}});
+	bool keepGoing=false;
+	
+	std::vector<std::string> toDelete;
+	do{
+		auto outcome=dbClient.Scan(request);
+		if(!outcome.IsSuccess()){
+			//TODO: more principled logging or reporting of the nature of the error
+			auto err=outcome.GetError();
+			log_error("Failed to fetch Group secondary records: " << err.GetMessage());
+			return false;
+		}
+		const auto& result=outcome.GetResult();
+		//set up fetching the next page if necessary
+		if(!result.GetLastEvaluatedKey().empty()){
+			keepGoing=true;
+			request.SetExclusiveStartKey(result.GetLastEvaluatedKey());
+		}
+		else
+			keepGoing=false;
+		//collect results from this page
+		for(const auto& item : result.GetItems())
+			toDelete.push_back(findOrThrow(item,"sortKey","Group secondary record missing sortKey attribute").GetS());
+	}while(keepGoing);
+	
+	for(const auto& sortKey : toDelete){
+		outcome=dbClient.DeleteItem(Aws::DynamoDB::Model::DeleteItemRequest()
+										 .WithTableName(groupTableName)
+										 .WithKey({{"name",AttributeValue(groupName)},
+												   {"sortKey",AttributeValue(sortKey)}}));
+		if(!outcome.IsSuccess()){
+			auto err=outcome.GetError();
+			log_error("Failed to delete Group record: " << err.GetMessage());
+			return false;
+		}
+	}
+	
 	return true;
 }
 
@@ -1059,11 +1242,8 @@ bool PersistentStore::updateGroup(const Group& group){
 	                                            {"displayName",AVU().WithValue(AV(group.displayName))},
 	                                            {"email",AVU().WithValue(AV(group.email))},
 	                                            {"phone",AVU().WithValue(AV(group.phone))},
-	                                            {"scienceField",AVU().WithValue(AV(group.scienceField))},
+	                                            {"purpose",AVU().WithValue(AV(group.purpose))},
 	                                            {"description",AVU().WithValue(AV(group.description))},
-	                                            {"PIName",AVU().WithValue(AV(group.PIName))},
-	                                            {"PIEmail",AVU().WithValue(AV(group.PIEmail))},
-	                                            {"PIOrganization",AVU().WithValue(AV(group.PIOrganization))}
 	                                            })
 	                                 );
 	if(!outcome.IsSuccess()){
@@ -1174,12 +1354,9 @@ std::vector<Group> PersistentStore::listGroups(){
 			group.displayName=findOrThrow(item,"displayName","Group record missing displayName attribute").GetS();
 			group.email=findOrThrow(item,"email","Group record missing email attribute").GetS();
 			group.phone=findOrThrow(item,"phone","Group record missing phone attribute").GetS();
-			group.scienceField=findOrThrow(item,"scienceField","Group record missing field of science attribute").GetS();
+			group.purpose=findOrThrow(item,"purpose","Group record missing purpose attribute").GetS();
 			group.description=findOrThrow(item,"description","Group record missing description attribute").GetS();
-			group.description=findOrThrow(item,"PIName","Group record missing PI name attribute").GetS();
-			group.description=findOrThrow(item,"PIEmail","Group record missing PI email attribute").GetS();
-			group.description=findOrThrow(item,"PIOrganization","Group record missing PI organization attribute").GetS();
-			group.description=findOrThrow(item,"creationDate","Group record missing creation date attribute").GetS();
+			group.creationDate=findOrThrow(item,"creationDate","Group record missing creation date attribute").GetS();
 			collected.push_back(group);
 
 			CacheRecord<Group> record(group,groupCacheValidity);
@@ -1236,11 +1413,8 @@ std::vector<GroupRequest> PersistentStore::listGroupRequests(){
 			gr.displayName=findOrThrow(item,"displayName","Group request record missing displayName attribute").GetS();
 			gr.email=findOrThrow(item,"email","Group request record missing email attribute").GetS();
 			gr.phone=findOrThrow(item,"phone","Group request record missing phone attribute").GetS();
-			gr.scienceField=findOrThrow(item,"scienceField","Group request record missing field of science attribute").GetS();
+			gr.purpose=findOrThrow(item,"purpose","Group request record missing purpose attribute").GetS();
 			gr.description=findOrThrow(item,"description","Group request record missing description attribute").GetS();
-			gr.description=findOrThrow(item,"PIName","Group request record missing PI name attribute").GetS();
-			gr.description=findOrThrow(item,"PIEmail","Group request record missing PI email attribute").GetS();
-			gr.description=findOrThrow(item,"PIOrganization","Group request record missing PI organization attribute").GetS();
 			gr.requester=findOrThrow(item,"requester","Group request record missing requester attribute").GetS();
 			collected.push_back(gr);
 
@@ -1287,11 +1461,8 @@ Group PersistentStore::getGroup(const std::string& groupName){
 	group.displayName=findOrThrow(item,"displayName","Group record missing displayName attribute").GetS();
 	group.email=findOrThrow(item,"email","Group record missing email attribute").GetS();
 	group.phone=findOrThrow(item,"phone","Group record missing phone attribute").GetS();
-	group.scienceField=findOrThrow(item,"scienceField","Group record missing field of science attribute").GetS();
+	group.purpose=findOrThrow(item,"purpose","Group record missing purpose attribute").GetS();
 	group.description=findOrThrow(item,"description","Group record missing description attribute").GetS();
-	group.description=findOrThrow(item,"PIName","Group record missing PI name attribute").GetS();
-	group.description=findOrThrow(item,"PIEmail","Group record missing PI email attribute").GetS();
-	group.description=findOrThrow(item,"PIOrganization","Group record missing PI organization attribute").GetS();
 	if(item.count("requester"))
 		group.pending=true;
 	else
@@ -1338,21 +1509,29 @@ GroupRequest PersistentStore::getGroupRequest(const std::string& groupName){
 	gr.displayName=findOrThrow(item,"email","Group Request record missing displayName attribute").GetS();
 	gr.email=findOrThrow(item,"email","Group Request record missing email attribute").GetS();
 	gr.phone=findOrThrow(item,"phone","Group Request record missing phone attribute").GetS();
-	gr.scienceField=findOrThrow(item,"scienceField","Group Request record missing field of science attribute").GetS();
+	gr.purpose=findOrThrow(item,"scienceField","Group Request record missing purpose attribute").GetS();
 	gr.description=findOrThrow(item,"description","Group Request record missing description attribute").GetS();
-	gr.description=findOrThrow(item,"PIName","Group Request record missing PI name attribute").GetS();
-	gr.description=findOrThrow(item,"PIEmail","Group Request record missing PI email attribute").GetS();
-	gr.description=findOrThrow(item,"PIOrganization","Group Request record missing PI organization attribute").GetS();
 	gr.requester=findOrThrow(item,"requester","Group Request record missing requester attribute").GetS();
 	
-	/*//update caches
-	CacheRecord<Group> record(group,groupCacheValidity);
-	groupCache.insert_or_assign(groupName,record);*/
+	auto extra=findOrThrow(item,"secondaryAttributes","Group Request record missing secondary attributes").GetM();
+	for(const auto& attr : extra)
+		gr.secondaryAttributes[attr.first]=attr.second->GetS();
+	
+	//update caches
+	CacheRecord<GroupRequest> record(gr,groupCacheValidity);
+	groupRequestCache.insert_or_assign(groupName,record);
 	
 	return gr;
 }
 
 bool PersistentStore::approveGroupRequest(const std::string& groupName){
+	//get secondary attributes to put them into their own records
+	const GroupRequest gr=getGroupRequest(groupName);
+	if(!gr.valid){
+		log_error("Group request " << groupName << " could not be fetched");
+		return false;
+	}
+	
 	using AV=Aws::DynamoDB::Model::AttributeValue;
 	using AVU=Aws::DynamoDB::Model::AttributeValueUpdate;
 	auto outcome=dbClient.UpdateItem(Aws::DynamoDB::Model::UpdateItemRequest()
@@ -1361,6 +1540,7 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 	                                           {"sortKey",AV(groupName)}})
 	                                 .WithAttributeUpdates({
 	                                            {"requester",AVU().WithAction(Aws::DynamoDB::Model::AttributeAction::DELETE_)},
+	                                            {"secondaryAttributes",AVU().WithAction(Aws::DynamoDB::Model::AttributeAction::DELETE_)},
 	                                            {"creationDate",AVU().WithValue(AV(timestamp()))},
 	                                            })
 	                                 );
@@ -1370,11 +1550,115 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 		return false;
 	}
 	
+	for(const auto& attr : gr.secondaryAttributes)
+		setGroupSecondaryAttribute(gr.name,attr.first,attr.second);
+	
 	{ //make sure no old, incorrect cache entries persist
 		groupCache.erase(groupName);
 		groupMembershipByGroupCache.erase(groupName);
 	}
 	
+	return true;
+}
+
+bool PersistentStore::setGroupSecondaryAttribute(const std::string& groupName, 
+                                const std::string& attributeName, 
+                                const std::string& attributeValue){
+	if(attributeValue.empty())
+		throw std::runtime_error("Attribute value must not be empty because Dynamo");
+	using AV=Aws::DynamoDB::Model::AttributeValue;
+	auto outcome=dbClient.PutItem(Aws::DynamoDB::Model::PutItemRequest()
+	                              .WithTableName(groupTableName)
+	                              .WithItem({{"name",AV(groupName)},
+	                                         {"sortKey",AV(groupName+":attr:"+attributeName)},
+	                                         {"secondaryAttribute",AV(attributeValue)}
+	                              }));
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to add Group secondary attribute record: " << err.GetMessage());
+		return false;
+	}
+	
+	//update caches
+	auto record=std::make_pair(attributeName,CacheRecord<std::string>(attributeValue,groupCacheValidity));
+	std::map<std::string,CacheRecord<std::string>> m{record};
+	groupAttributeCache.upsert(groupName,[&](std::map<std::string,CacheRecord<std::string>>& attrs){
+		auto it=attrs.find(record.first);
+		if(it==attrs.end())
+			attrs.insert(record);
+		else
+			it->second=record.second;
+	},m);
+    
+	return true;
+}
+
+std::string PersistentStore::getGroupSecondaryAttribute(const std::string& groupName, const std::string& attributeName){
+	//first see if we have this cached
+	{
+		CacheRecord<std::string> record;
+		if(groupAttributeCache.find_fn(groupName,[&](const std::map<std::string,CacheRecord<std::string>>& attrs){
+			auto it=attrs.find(attributeName);
+			if(it!=attrs.end())
+				record=it->second;
+		})){
+			//we have a cached record; is it still valid?
+			if(record){ //it is, just return it
+				cacheHits++;
+				return record;
+			}
+		}
+	}
+	//need to query the database
+	databaseQueries++;
+	log_info("Querying database for group secondary record " << groupName << ':' << attributeName);
+	using AV=Aws::DynamoDB::Model::AttributeValue;
+	auto outcome=dbClient.GetItem(Aws::DynamoDB::Model::GetItemRequest()
+								  .WithTableName(groupTableName)
+								  .WithKey({{"name",AV(groupName)},
+	                                        {"sortKey",AV(groupName+":attr:"+attributeName)}}));
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to group secondary record: " << err.GetMessage());
+		return std::string{};
+	}
+	const auto& item=outcome.GetResult().GetItem();
+	if(item.empty()) //no match found
+		return std::string{};
+	
+	std::string result=findOrThrow(item,"secondaryAttribute","group secondary record missing attribute").GetS();
+	
+	//update cache
+	auto record=std::make_pair(groupName,CacheRecord<std::string>(result,groupCacheValidity));
+	std::map<std::string,CacheRecord<std::string>> m{record};
+	groupAttributeCache.upsert(groupName,[&](std::map<std::string,CacheRecord<std::string>>& attrs){
+		auto it=attrs.find(record.first);
+		if(it==attrs.end())
+			attrs.insert(record);
+		else
+			it->second=record.second;
+	},m);
+	
+	return result;
+}
+
+bool PersistentStore::removeGroupSecondaryAttribute(const std::string& groupName, const std::string& attributeName){
+	//remove from cache is present there
+	groupAttributeCache.erase_fn(groupName,[&](std::map<std::string,CacheRecord<std::string>>& attrs){
+		attrs.erase(attributeName);
+		return attrs.empty(); //if the map for this group is empty, remove it entirely
+	});
+	
+	using AV=Aws::DynamoDB::Model::AttributeValue;
+	auto outcome=dbClient.DeleteItem(Aws::DynamoDB::Model::DeleteItemRequest()
+								     .WithTableName(groupTableName)
+								     .WithKey({{"name",AV(groupName)},
+	                                           {"sortKey",AV(groupName+":attr:"+attributeName)}}));
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to delete secondary group record record: " << err.GetMessage());
+		return false;
+	}
 	return true;
 }
 

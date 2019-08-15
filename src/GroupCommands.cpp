@@ -147,7 +147,7 @@ crow::response listGroups(PersistentStore& store, const crow::request& req){
 		groupResult.AddMember("display_name", group.displayName, alloc);
 		groupResult.AddMember("email", group.email, alloc);
 		groupResult.AddMember("phone", group.phone, alloc);
-		groupResult.AddMember("field_of_science", group.scienceField, alloc);
+		groupResult.AddMember("purpose", group.purpose, alloc);
 		groupResult.AddMember("description", group.description, alloc);
 		resultItems.PushBack(groupResult, alloc);
 	}
@@ -208,30 +208,19 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	if(body["metadata"].HasMember("phone") && !body["metadata"]["phone"].IsString())
 		return crow::response(400,generateError("Incorrect type for Group phone"));
 	
-	if(!body["metadata"].HasMember("field_of_science"))
-		return crow::response(400,generateError("Missing Group field of science in request"));
+	if(!body["metadata"].HasMember("purpose"))
+		return crow::response(400,generateError("Missing Group purpose in request"));
 	if(!body["metadata"]["field_of_science"].IsString())
-		return crow::response(400,generateError("Incorrect type for Group field of science"));
+		return crow::response(400,generateError("Incorrect type for Group purpose"));
 		
 	if(body["metadata"].HasMember("description") && !body["metadata"]["description"].IsString())
 		return crow::response(400,generateError("Incorrect type for Group description"));
-	
-	if(!body["metadata"].HasMember("PI_name"))
-		return crow::response(400,generateError("Missing Group PI name in request"));
-	if(!body["metadata"]["PI_name"].IsString())
-		return crow::response(400,generateError("Incorrect type for Group PI name"));
-	
-	if(!body["metadata"].HasMember("PI_email"))
-		return crow::response(400,generateError("Missing Group PI email address in request"));
-	if(!body["metadata"]["PI_email"].IsString())
-		return crow::response(400,generateError("Incorrect type for Group PI email address"));
-	
-	if(!body["metadata"].HasMember("PI_organization"))
-		return crow::response(400,generateError("Missing Group PI organization in request"));
-	if(!body["metadata"]["PI_organization"].IsString())
-		return crow::response(400,generateError("Incorrect type for Group PI organization"));
+		
+	if(body["metadata"].HasMember("additional_attributes") && !body["metadata"]["additional_attributes"].IsObject())
+		return crow::response(400,generateError("Incorrect type for Group additional attributes"));
 	
 	Group group;
+	std::map<std::string,std::string> extraAttributes;
 	
 	//TODO: update name validation
 	group.name=newGroupName;
@@ -266,10 +255,10 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	if(group.phone.empty())
 		group.phone=" "; //Dynamo will get upset if a string is empty
 	
-	if(body["metadata"].HasMember("field_of_science"))
-		group.scienceField=normalizeScienceField(body["metadata"]["field_of_science"].GetString());
-	if(group.scienceField.empty())
-		return crow::response(400,generateError("Unrecognized value for Group field of science\n"
+	if(body["metadata"].HasMember("purpose"))
+		group.purpose=normalizeScienceField(body["metadata"]["purpose"].GetString());
+	if(group.purpose.empty())
+		return crow::response(400,generateError("Unrecognized value for Group purpose\n"
 		  "See http://slateci.io/docs/science-fields for a list of accepted values"));
 	
 	if(body["metadata"].HasMember("description"))
@@ -277,15 +266,13 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	if(group.description.empty())
 		group.description=" "; //Dynamo will get upset if a string is empty
 	
-	group.PIName=body["metadata"]["PI_name"].GetString();
-	if(group.PIName.empty())
-		return crow::response(400,generateError("Group PI name may not be the empty string"));
-	group.PIEmail=body["metadata"]["PI_email"].GetString();
-	if(group.PIEmail.empty())
-		return crow::response(400,generateError("Group PI email address may not be the empty string"));
-	group.PIOrganization=body["metadata"]["PI_organization"].GetString();
-	if(group.PIOrganization.empty())
-		return crow::response(400,generateError("Group PI organization name may not be the empty string"));
+	if(body["metadata"].HasMember("additional_attributes")){
+		for(const auto& entry : body["metadata"].GetObject()){
+			if(!entry.value.IsString())
+				return crow::response(400,generateError("Incorrect type for Group additional attribute value"));
+			extraAttributes[entry.name.GetString()]=entry.value.GetString();
+		}
+	}
 	
 	group.creationDate=timestamp();
 	
@@ -317,10 +304,17 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		}
 	
 		log_info("Created " << group << " on behalf of " << user);
+		
+		//if there are any extra attributes, store those too
+		for(const auto attr : extraAttributes){
+			if(!store.setGroupSecondaryAttribute(group.name,attr.first,attr.second))
+				log_error("Failed to store group secondary attribute " << attr.first << '=' << attr.second);
+		}
 	}
 	else{ //otherwise, store a group creation request for later approval by an admin
 		GroupRequest gr(group,user.unixName);
 		gr.valid=true;
+		gr.secondaryAttributes=extraAttributes;
 		
 		log_info("Storing Group Request for " << gr);
 		bool created=store.addGroupRequest(gr);
@@ -355,7 +349,7 @@ crow::response getGroupInfo(PersistentStore& store, const crow::request& req, st
 	metadata.AddMember("display_name", group.displayName, alloc);
 	metadata.AddMember("email", group.email, alloc);
 	metadata.AddMember("phone", group.phone, alloc);
-	metadata.AddMember("field_of_science", group.scienceField, alloc);
+	metadata.AddMember("purpose", group.purpose, alloc);
 	metadata.AddMember("description", group.description, alloc);
 	result.AddMember("kind", "Group", alloc);
 	result.AddMember("metadata", metadata, alloc);
@@ -412,12 +406,12 @@ crow::response updateGroup(PersistentStore& store, const crow::request& req, std
 		targetGroup.phone=body["metadata"]["phone"].GetString();
 		doUpdate=true;
 	}
-	if(body["metadata"].HasMember("field_of_science")){
-		if(!body["metadata"]["field_of_science"].IsString())
-			return crow::response(400,generateError("Incorrect type for field of science"));	
-		targetGroup.scienceField=normalizeScienceField(body["metadata"]["field_of_science"].GetString());
-		if(targetGroup.scienceField.empty())
-			return crow::response(400,generateError("Unrecognized value for Group field of science"));
+	if(body["metadata"].HasMember("purpose")){
+		if(!body["metadata"]["purpose"].IsString())
+			return crow::response(400,generateError("Incorrect type for purpose"));	
+		targetGroup.purpose=normalizeScienceField(body["metadata"]["purpose"].GetString());
+		if(targetGroup.purpose.empty())
+			return crow::response(400,generateError("Unrecognized value for Group purpose"));
 		doUpdate=true;
 	}
 	if(body["metadata"].HasMember("description")){
@@ -547,7 +541,7 @@ crow::response getSubgroups(PersistentStore& store, const crow::request& req, st
 		groupResult.AddMember("display_name", group.displayName, alloc);
 		groupResult.AddMember("email", group.email, alloc);
 		groupResult.AddMember("phone", group.phone, alloc);
-		groupResult.AddMember("field_of_science", group.scienceField, alloc);
+		groupResult.AddMember("purpose", group.purpose, alloc);
 		groupResult.AddMember("description", group.description, alloc);
 		resultItems.PushBack(groupResult, alloc);
 	}
@@ -583,7 +577,7 @@ crow::response getSubgroupRequests(PersistentStore& store, const crow::request& 
 		groupResult.AddMember("display_name", group.displayName, alloc);
 		groupResult.AddMember("email", group.email, alloc);
 		groupResult.AddMember("phone", group.phone, alloc);
-		groupResult.AddMember("field_of_science", group.scienceField, alloc);
+		groupResult.AddMember("purpose", group.purpose, alloc);
 		groupResult.AddMember("description", group.description, alloc);
 		groupResult.AddMember("requester", group.requester, alloc);
 		resultItems.PushBack(groupResult, alloc);
@@ -659,6 +653,81 @@ crow::response denySubgroupRequest(PersistentStore& store, const crow::request& 
 		return crow::response(500, generateError("Deleting group request failed"));
 	
 	return(crow::response(200));
+}
+
+crow::response getGroupAttribute(PersistentStore& store, const crow::request& req, std::string groupName, std::string attributeName){
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to fetch secondary attribute " << attributeName << " of group " << groupName);
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+	
+	groupName=canonicalizeGroupName(groupName);
+	//Any user can query any group property?
+	
+	std::string value=store.getGroupSecondaryAttribute(groupName, attributeName);
+	if(value.empty())
+		return crow::response(404,generateError("Group or attribute not found"));
+	
+	rapidjson::Document result(rapidjson::kObjectType);
+	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
+	
+	result.AddMember("apiVersion", "v1alpha1", alloc);
+	result.AddMember("data", value, alloc);
+	
+	return crow::response(to_string(result));
+}
+
+crow::response setGroupAttribute(PersistentStore& store, const crow::request& req, std::string groupName, std::string attributeName){
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to set secondary attribute " << attributeName << " for group " << groupName);
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+		
+	groupName=canonicalizeGroupName(groupName);
+	//Only superusers and admins of a Group can alter it
+	if(!user.superuser && store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin)
+		return crow::response(403,generateError("Not authorized"));
+
+	rapidjson::Document body;
+	try{
+		body.Parse(req.body.c_str());
+	}catch(std::runtime_error& err){
+		return crow::response(400,generateError("Invalid JSON in request body"));
+	}
+
+	if(body.IsNull())
+		return crow::response(400,generateError("Invalid JSON in request body"));
+	if(!body.HasMember("data"))
+		return crow::response(400,generateError("Missing attribute data in request"));
+	if(!body["data"].IsString())
+		return crow::response(400,generateError("Attribute data must be a string"));
+		
+	std::string attributeValue=body["data"].GetString();
+	bool success=store.setGroupSecondaryAttribute(groupName, attributeName, attributeValue);
+	
+	if(!success)
+		return crow::response(500,generateError("Failed to store group attribute"));
+	
+	return crow::response(200);
+}
+
+crow::response deleteGroupAttribute(PersistentStore& store, const crow::request& req, std::string groupName, std::string attributeName){
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to delete secondary attribute " << attributeName << " from group " << groupName);
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+	
+	groupName=canonicalizeGroupName(groupName);
+	//Only superusers and admins of a Group can alter it
+	if(!user.superuser && store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin)
+		return crow::response(403,generateError("Not authorized"));
+	
+	bool success=store.removeGroupSecondaryAttribute(groupName, attributeName);
+	
+	if(!success)
+		return crow::response(500,generateError("Failed to delete group attribute"));
+	
+	return crow::response(200);
 }
 
 crow::response getScienceFields(PersistentStore& store, const crow::request& req){

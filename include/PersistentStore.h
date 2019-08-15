@@ -193,6 +193,14 @@ public:
 	///\return whether the user is a member of the group
 	GroupMembership userStatusInGroup(const std::string& uID, std::string groupName);
 	
+	///\return whether the attribute was successfully recorded
+	bool setUserSecondaryAttribute(const std::string& uID, const std::string& attributeName, const std::string& attributeValue);
+	
+	std::string getUserSecondaryAttribute(const std::string& uID, const std::string& attributeName);
+	
+	///\return whether the attribute was successfully deleted
+	bool removeUserSecondaryAttribute(const std::string& uID, const std::string& attributeName);
+	
 	///\throws std::runtime_error o database query failure
 	bool unixNameInUse(const std::string& name);
 	
@@ -241,6 +249,14 @@ public:
 	
 	bool approveGroupRequest(const std::string& groupName);
 	
+	///\return whether the attribute was successfully recorded
+	bool setGroupSecondaryAttribute(const std::string& groupName, const std::string& attributeName, const std::string& attributeValue);
+	
+	std::string getGroupSecondaryAttribute(const std::string& groupName, const std::string& attributeName);
+	
+	///\return whether the attribute was successfully deleted
+	bool removeGroupSecondaryAttribute(const std::string& groupName, const std::string& attributeName);
+	
 	///Return human-readable performance statistics
 	std::string getStatistics() const;
 	
@@ -262,12 +278,16 @@ private:
 	cuckoohash_map<std::string,CacheRecord<User>> userCache;
 	cuckoohash_map<std::string,CacheRecord<User>> userByTokenCache;
 	cuckoohash_map<std::string,CacheRecord<User>> userByGlobusIDCache;
+	///This cache holds secondary user attributes
+	cuckoohash_map<std::string,std::map<std::string,CacheRecord<std::string>>> userAttributeCache;
 	///This cache holds individual membership records, keyed by userID:groupName
 	cuckoohash_map<std::string,CacheRecord<GroupMembership>> groupMembershipCache;
 	///This cache holds all memberships associated with each user
 	concurrent_multimap<std::string,CacheRecord<GroupMembership>> groupMembershipByUserCache;
 	///This cache holds all memberships associated with each group
 	concurrent_multimap<std::string,CacheRecord<GroupMembership>> groupMembershipByGroupCache;
+	///This cache holds secondary group attributes
+	cuckoohash_map<std::string,std::map<std::string,CacheRecord<std::string>>> groupAttributeCache;
 	///duration for which cached group records should remain valid
 	const std::chrono::seconds groupCacheValidity;
 	connect_atomic<std::chrono::steady_clock::time_point> groupCacheExpirationTime;

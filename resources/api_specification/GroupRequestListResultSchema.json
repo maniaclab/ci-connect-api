@@ -19,7 +19,7 @@
           "display_name": {
             "type": "string"
           },
-          "field_of_science": {
+          "purpose": {
             "type": "string"
           },
           "email": {
@@ -35,7 +35,7 @@
             "type": "string"
           }
         },
-        "required": ["name","display_name","field_of_science","email","phone","description","requester"]
+        "required": ["name","display_name","purpose","email","phone","description","requester"]
       }
     }
   },

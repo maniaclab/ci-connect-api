@@ -580,6 +580,81 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 	return(crow::response(200));
 }
 
+crow::response getUserAttribute(PersistentStore& store, const crow::request& req, 
+                                std::string uID, std::string attributeName){
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to fetch secondary attribute " << attributeName << " of user " << uID);
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+
+	//Any user can query any user property?
+	
+	std::string value=store.getUserSecondaryAttribute(uID, attributeName);
+	if(value.empty())
+		return crow::response(404,generateError("User or attribute not found"));
+	
+	rapidjson::Document result(rapidjson::kObjectType);
+	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
+	
+	result.AddMember("apiVersion", "v1alpha1", alloc);
+	result.AddMember("data", value, alloc);
+	
+	return crow::response(to_string(result));
+}
+
+crow::response setUserAttribute(PersistentStore& store, const crow::request& req, 
+                                std::string uID, std::string attributeName){
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to set secondary attribute " << attributeName << " for user " << uID);
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+	
+	//Only superusers and users can alter themselves
+	if(!user.superuser && user.unixName!=uID)
+		return crow::response(403,generateError("Not authorized"));
+
+	rapidjson::Document body;
+	try{
+		body.Parse(req.body.c_str());
+	}catch(std::runtime_error& err){
+		return crow::response(400,generateError("Invalid JSON in request body"));
+	}
+
+	if(body.IsNull())
+		return crow::response(400,generateError("Invalid JSON in request body"));
+	if(!body.HasMember("data"))
+		return crow::response(400,generateError("Missing attribute data in request"));
+	if(!body["data"].IsString())
+		return crow::response(400,generateError("Attribute data must be a string"));
+		
+	std::string attributeValue=body["data"].GetString();
+	bool success=store.setUserSecondaryAttribute(uID, attributeName, attributeValue);
+	
+	if(!success)
+		return crow::response(500,generateError("Failed to store user attribute"));
+	
+	return crow::response(200);
+}
+
+crow::response deleteUserAttribute(PersistentStore& store, const crow::request& req,
+                                   std::string uID, std::string attributeName){
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to delete secondary attribute " << attributeName << " from user " << uID);
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+	
+	//Only superusers and users can alter themselves
+	if(!user.superuser && user.unixName!=uID)
+		return crow::response(403,generateError("Not authorized"));
+	
+	bool success=store.removeUserSecondaryAttribute(uID, attributeName);
+	
+	if(!success)
+		return crow::response(500,generateError("Failed to delete user attribute"));
+	
+	return crow::response(200);
+}
+
 crow::response findUser(PersistentStore& store, const crow::request& req){
 	//this is the requesting user, not the requested user
 	const User user=authenticateUser(store, req.url_params.get("token"));
