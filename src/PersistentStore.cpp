@@ -1131,6 +1131,7 @@ bool PersistentStore::addGroupRequest(const GroupRequest& gr){
 	using AV=Aws::DynamoDB::Model::AttributeValue;
 	
 	AV secondary;
+	secondary.AddMEntry("dummy",std::make_shared<AV>("dummy"));
 	for(const auto& entry : gr.secondaryAttributes)
 		secondary.AddMEntry(entry.first,std::make_shared<AV>(entry.second));
 	
@@ -1509,13 +1510,16 @@ GroupRequest PersistentStore::getGroupRequest(const std::string& groupName){
 	gr.displayName=findOrThrow(item,"email","Group Request record missing displayName attribute").GetS();
 	gr.email=findOrThrow(item,"email","Group Request record missing email attribute").GetS();
 	gr.phone=findOrThrow(item,"phone","Group Request record missing phone attribute").GetS();
-	gr.purpose=findOrThrow(item,"scienceField","Group Request record missing purpose attribute").GetS();
+	gr.purpose=findOrThrow(item,"purpose","Group Request record missing purpose attribute").GetS();
 	gr.description=findOrThrow(item,"description","Group Request record missing description attribute").GetS();
 	gr.requester=findOrThrow(item,"requester","Group Request record missing requester attribute").GetS();
 	
 	auto extra=findOrThrow(item,"secondaryAttributes","Group Request record missing secondary attributes").GetM();
-	for(const auto& attr : extra)
+	for(const auto& attr : extra){
+		if(attr.first=="dummy")
+			continue;
 		gr.secondaryAttributes[attr.first]=attr.second->GetS();
+	}
 	
 	//update caches
 	CacheRecord<GroupRequest> record(gr,groupCacheValidity);
@@ -1550,8 +1554,11 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 		return false;
 	}
 	
-	for(const auto& attr : gr.secondaryAttributes)
+	for(const auto& attr : gr.secondaryAttributes){
+		if(attr.first=="dummy")
+			continue;
 		setGroupSecondaryAttribute(gr.name,attr.first,attr.second);
+	}
 	
 	{ //make sure no old, incorrect cache entries persist
 		groupCache.erase(groupName);
