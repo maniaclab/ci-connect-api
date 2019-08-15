@@ -210,7 +210,7 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	
 	if(!body["metadata"].HasMember("purpose"))
 		return crow::response(400,generateError("Missing Group purpose in request"));
-	if(!body["metadata"]["field_of_science"].IsString())
+	if(!body["metadata"]["purpose"].IsString())
 		return crow::response(400,generateError("Incorrect type for Group purpose"));
 		
 	if(body["metadata"].HasMember("description") && !body["metadata"]["description"].IsString())
