@@ -416,6 +416,7 @@ void PersistentStore::InitializeTables(std::string bootstrapUserFile){
 		rootUser.sshKey="No SSH key";
 		rootUser.unixName="root";
 		rootUser.joinDate=timestamp();
+		rootUser.lastUseTime=timestamp();
 		rootUser.superuser=true;
 		rootUser.serviceAccount=true;
 		rootUser.valid=true;
@@ -650,7 +651,7 @@ bool PersistentStore::updateUser(const User& user, const User& oldUser){
 	
 	//update caches
 	CacheRecord<User> record(user,userCacheValidity);
-	userCache.insert_or_assign(user.unixName,record);
+	userCache.upsert(user.unixName,[&record](CacheRecord<User>& existing){ existing=record; },record);
 	//if the token has changed, ensure that any old cache record is removed
 	if(oldUser.token!=user.token)
 		userByTokenCache.erase(oldUser.token);

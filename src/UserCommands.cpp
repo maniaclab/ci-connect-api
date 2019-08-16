@@ -199,6 +199,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	metadata.AddMember("access_token", targetUser.token, alloc);
 	metadata.AddMember("public_key", targetUser.sshKey, alloc);
 	metadata.AddMember("join_date", targetUser.joinDate, alloc);
+	metadata.AddMember("last_use_time", targetUser.lastUseTime, alloc);
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
 	metadata.AddMember("superuser", targetUser.superuser, alloc);
 	metadata.AddMember("service_account", targetUser.serviceAccount, alloc);
@@ -245,7 +246,7 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 	metadata.AddMember("public_key", targetUser.sshKey, alloc);
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
 	metadata.AddMember("join_date", targetUser.joinDate, alloc);
-	metadata.AddMember("last_use_time", user.lastUseTime, alloc);
+	metadata.AddMember("last_use_time", targetUser.lastUseTime, alloc);
 	metadata.AddMember("superuser", targetUser.superuser, alloc);
 	metadata.AddMember("service_account", targetUser.serviceAccount, alloc);
 	rapidjson::Value groupMemberships(rapidjson::kArrayType);
@@ -761,9 +762,9 @@ crow::response updateLastUseTime(PersistentStore& store, const crow::request& re
 	if(!targetUser)
 		return crow::response(404,generateError("User not found"));
 	
-	log_info("Updating " << targetUser << " last use time");
 	User updatedUser=targetUser;
 	updatedUser.lastUseTime=timestamp();
+	log_info("Updating " << updatedUser << " last use time to " << updatedUser.lastUseTime);
 	bool updated=store.updateUser(updatedUser,targetUser);
 	
 	if(!updated)
