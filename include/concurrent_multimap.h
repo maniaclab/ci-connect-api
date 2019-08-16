@@ -114,7 +114,7 @@ public:
 	}
 	
 	///Inserts the key-value pair into the table. If the pair is already in the 
-	///table, the version of \p val which was laready present is replaced with 
+	///table, the version of \p val which was already present is replaced with 
 	///the new one. 
 	///\tparam K type of the key
 	///\param key the key for which to search
@@ -155,7 +155,7 @@ public:
 	}
 	
 	///Updates the key-value pair in the table. If the pair is already in the 
-	///table, the version of \p val which was laready present is replaced with 
+	///table, the version of \p val which was already present is replaced with 
 	///the new one, otherwise does nothing.
 	///\tparam K type of the key
 	///\tparam V type of the value

@@ -141,7 +141,12 @@ void waitUntilIndexDeleted(Aws::DynamoDB::DynamoDBClient& dbClient,
 ///A default string value to use in place of missing properties, when having a 
 ///trivial value is not a big concern
 const Aws::DynamoDB::Model::AttributeValue missingString(" ");
-	
+
+template<typename Cache, typename Key=typename Cache::key_type, typename Value=typename Cache::mapped_type>
+void replaceCacheRecord(Cache& cache, const Key& key, const Value& value){
+	cache.upsert(key,[&value](Value& existing){ existing=value; },value);
+}
+
 } //anonymous namespace
 
 PersistentStore::PersistentStore(const Aws::Auth::AWSCredentials& credentials, 
@@ -453,9 +458,9 @@ bool PersistentStore::addUser(const User& user){
 	
 	//update caches
 	CacheRecord<User> record(user,userCacheValidity);
-	userCache.insert_or_assign(user.unixName,record);
-	userByTokenCache.insert_or_assign(user.token,record);
-	userByGlobusIDCache.insert_or_assign(user.globusID,record);
+	replaceCacheRecord(userCache,user.unixName,record);
+	replaceCacheRecord(userByTokenCache,user.token,record);
+	replaceCacheRecord(userByGlobusIDCache,user.globusID,record);
 	
 	return true;
 }
@@ -505,9 +510,9 @@ User PersistentStore::getUser(const std::string& id){
 	
 	//update caches
 	CacheRecord<User> record(user,userCacheValidity);
-	userCache.insert_or_assign(user.unixName,record);
-	userByTokenCache.insert_or_assign(user.token,record);
-	userByGlobusIDCache.insert_or_assign(user.globusID,record);
+	replaceCacheRecord(userCache,user.unixName,record);
+	replaceCacheRecord(userByTokenCache,user.token,record);
+	replaceCacheRecord(userByGlobusIDCache,user.globusID,record);
 	
 	return user;
 }
@@ -567,9 +572,9 @@ User PersistentStore::findUserByToken(const std::string& token){
 	
 	//update caches
 	CacheRecord<User> record(user,userCacheValidity);
-	userCache.insert_or_assign(user.unixName,record);
-	userByTokenCache.insert_or_assign(user.token,record);
-	userByGlobusIDCache.insert_or_assign(user.globusID,record);
+	replaceCacheRecord(userCache,user.unixName,record);
+	replaceCacheRecord(userByTokenCache,user.token,record);
+	replaceCacheRecord(userByGlobusIDCache,user.globusID,record);
 	
 	return user;
 }
@@ -617,9 +622,9 @@ User PersistentStore::findUserByGlobusID(const std::string& globusID){
 	//update caches
 	CacheRecord<User> record(user,userCacheValidity);
 	//We don't have enough information to populate the other caches. :(
-	//userCache.insert_or_assign(user.unixName,record);
-	//userByTokenCache.insert_or_assign(user.token,record);
-	userByGlobusIDCache.insert_or_assign(user.globusID,record);
+	//replaceCacheRecord(userCache,user.unixName,record);
+	//replaceCacheRecord(userByTokenCache,user.token,record);
+	replaceCacheRecord(userByGlobusIDCache,user.globusID,record);
 	
 	return user;
 }
@@ -651,12 +656,13 @@ bool PersistentStore::updateUser(const User& user, const User& oldUser){
 	
 	//update caches
 	CacheRecord<User> record(user,userCacheValidity);
-	userCache.upsert(user.unixName,[&record](CacheRecord<User>& existing){ existing=record; },record);
+	//userCache.upsert(user.unixName,[&record](CacheRecord<User>& existing){ existing=record; },record);
+	replaceCacheRecord(userCache,user.unixName,record);
 	//if the token has changed, ensure that any old cache record is removed
 	if(oldUser.token!=user.token)
 		userByTokenCache.erase(oldUser.token);
-	userByTokenCache.insert_or_assign(user.token,record);
-	userByGlobusIDCache.insert_or_assign(user.globusID,record);
+	replaceCacheRecord(userByTokenCache,user.token,record);
+	replaceCacheRecord(userByGlobusIDCache,user.globusID,record);
 	
 	return true;
 }
@@ -794,7 +800,7 @@ std::vector<User> PersistentStore::listUsers(){
 			collected.push_back(user);
 
 			CacheRecord<User> record(user,userCacheValidity);
-			userCache.insert_or_assign(user.unixName,record);
+			replaceCacheRecord(userCache,user.unixName,record);
 		}
 	}while(keepGoing);
 	userCacheExpirationTime=std::chrono::steady_clock::now()+userCacheValidity;
@@ -822,7 +828,7 @@ bool PersistentStore::setUserStatusInGroup(const GroupMembership& membership){
 	
 	//update cache
 	CacheRecord<GroupMembership> record(membership,userCacheValidity);
-	groupMembershipCache.insert_or_assign(membership.userName+":"+membership.groupName,record);
+	replaceCacheRecord(groupMembershipCache,membership.userName+":"+membership.groupName,record);
 	groupMembershipByUserCache.insert_or_assign(membership.userName,record);
 	groupMembershipByGroupCache.insert_or_assign(membership.groupName,record);
 	
@@ -837,7 +843,7 @@ bool PersistentStore::removeUserFromGroup(const std::string& uID, std::string gr
 	membership.groupName=groupName;
 	membership.state=GroupMembership::NonMember;
 	CacheRecord<GroupMembership> record(membership,userCacheValidity);
-	groupMembershipCache.insert_or_assign(uID+":"+groupName,record);
+	replaceCacheRecord(groupMembershipCache,uID+":"+groupName,record);
 	groupMembershipByUserCache.insert_or_assign(uID,record);
 	groupMembershipByGroupCache.insert_or_assign(groupName,record);
 
@@ -907,7 +913,7 @@ GroupMembership PersistentStore::userStatusInGroup(const std::string& uID, std::
 	
 	//update cache
 	CacheRecord<GroupMembership> record(membership,userCacheValidity);
-	groupMembershipCache.insert_or_assign(uID+":"+groupName,record);
+	replaceCacheRecord(groupMembershipCache,uID+":"+groupName,record);
 	groupMembershipByUserCache.insert_or_assign(uID,record);
 	groupMembershipByGroupCache.insert_or_assign(groupName,record);
 	
@@ -1082,7 +1088,7 @@ std::vector<GroupMembership> PersistentStore::getUserGroupMemberships(const std:
 			memberships.push_back(membership);
 			
 			CacheRecord<GroupMembership> record(membership,userCacheValidity);
-			groupMembershipCache.insert_or_assign(uID+":"+membership.groupName,record);
+			replaceCacheRecord(groupMembershipCache,uID+":"+membership.groupName,record);
 			groupMembershipByUserCache.insert_or_assign(uID,record);
 			groupMembershipByGroupCache.insert_or_assign(membership.groupName,record);
 		}
@@ -1122,7 +1128,7 @@ bool PersistentStore::addGroup(const Group& group){
 	
 	//update caches
 	CacheRecord<Group> record(group,groupCacheValidity);
-	groupCache.insert_or_assign(group.name,record);
+	replaceCacheRecord(groupCache,group.name,record);
         
 	return true;
 }
@@ -1164,7 +1170,7 @@ bool PersistentStore::addGroupRequest(const GroupRequest& gr){
 	//???
 	//update caches
 	//CacheRecord<Group> record(group,groupCacheValidity);
-	//groupCache.insert_or_assign(group.name,record);
+	//replaceCacheRecord(groupCache,group.name,record);
         
 	return true;
 }
@@ -1263,7 +1269,7 @@ bool PersistentStore::updateGroup(const Group& group){
 	
 	//update caches
 	CacheRecord<Group> record(group,groupCacheValidity);
-	groupCache.insert_or_assign(group.name,record);
+	replaceCacheRecord(groupCache,group.name,record);
 	
 	return true;
 }
@@ -1310,7 +1316,7 @@ std::vector<GroupMembership> PersistentStore::getMembersOfGroup(const std::strin
 		memberships.push_back(membership);
 		
 		CacheRecord<GroupMembership> record(membership,userCacheValidity);
-		groupMembershipCache.insert_or_assign(membership.userName+":"+groupName,record);
+		replaceCacheRecord(groupMembershipCache,membership.userName+":"+groupName,record);
 		groupMembershipByUserCache.insert_or_assign(membership.userName,record);
 		groupMembershipByGroupCache.insert_or_assign(groupName,record);
 	}
@@ -1369,7 +1375,7 @@ std::vector<Group> PersistentStore::listGroups(){
 			collected.push_back(group);
 
 			CacheRecord<Group> record(group,groupCacheValidity);
-			groupCache.insert_or_assign(group.name,record);
+			replaceCacheRecord(groupCache,group.name,record);
 		}
 	}while(keepGoing);
 	groupCacheExpirationTime=std::chrono::steady_clock::now()+groupCacheValidity;
@@ -1428,7 +1434,7 @@ std::vector<GroupRequest> PersistentStore::listGroupRequests(){
 			collected.push_back(gr);
 
 			CacheRecord<GroupRequest> record(gr,groupCacheValidity);
-			groupRequestCache.insert_or_assign(gr.name,record);
+			replaceCacheRecord(groupRequestCache,gr.name,record);
 		}
 	}while(keepGoing);
 	groupRequestCacheExpirationTime=std::chrono::steady_clock::now()+groupCacheValidity;
@@ -1479,7 +1485,7 @@ Group PersistentStore::getGroup(const std::string& groupName){
 	
 	//update caches
 	CacheRecord<Group> record(group,groupCacheValidity);
-	groupCache.insert_or_assign(groupName,record);
+	replaceCacheRecord(groupCache,groupName,record);
 	
 	return group;
 }
@@ -1531,7 +1537,7 @@ GroupRequest PersistentStore::getGroupRequest(const std::string& groupName){
 	
 	//update caches
 	CacheRecord<GroupRequest> record(gr,groupCacheValidity);
-	groupRequestCache.insert_or_assign(groupName,record);
+	replaceCacheRecord(groupRequestCache,groupName,record);
 	
 	return gr;
 }
