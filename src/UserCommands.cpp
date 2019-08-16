@@ -152,7 +152,10 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	targetUser.email=body["metadata"]["email"].GetString();
 	targetUser.phone=body["metadata"]["phone"].GetString();
 	targetUser.institution=body["metadata"]["institution"].GetString();
-	targetUser.sshKey=body["metadata"]["public_key"].GetString();
+	if(body["metadata"].HasMember("public_key"))
+		targetUser.sshKey=body["metadata"]["public_key"].GetString();
+	else
+		targetUser.sshKey=" "; //dummy data to keep dynamo happy
 	targetUser.unixName=body["metadata"]["unix_name"].GetString();
 	targetUser.superuser=body["metadata"]["superuser"].GetBool();
 	targetUser.serviceAccount=body["metadata"]["service_account"].GetBool();
