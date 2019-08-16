@@ -28,5 +28,7 @@ crow::response findUser(PersistentStore& store, const crow::request& req);
 crow::response checkUnixName(PersistentStore& store, const crow::request& req);
 crow::response replaceUserToken(PersistentStore& store, const crow::request& req,
                                 const std::string uID);
+crow::response updateLastUseTime(PersistentStore& store, const crow::request& req,
+                                 const std::string uID);
 
 #endif //SLATE_USER_COMMANDS_H

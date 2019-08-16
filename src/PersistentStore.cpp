@@ -177,7 +177,7 @@ void PersistentStore::InitializeUserTable(){
 		                       .WithKeyType(KeyType::HASH)})
 		       .WithProjection(Projection()
 		                       .WithProjectionType(ProjectionType::INCLUDE)
-		                       .WithNonKeyAttributes({"unixName","name","email","phone","institution","globusID","sshKey","joinDate","superuser","serviceAccount"}))
+		                       .WithNonKeyAttributes({"unixName","name","email","phone","institution","globusID","sshKey","joinDate","lastUseTime","superuser","serviceAccount"}))
 		       .WithProvisionedThroughput(ProvisionedThroughput()
 		                                  .WithReadCapacityUnits(1)
 		                                  .WithWriteCapacityUnits(1));
@@ -439,6 +439,7 @@ bool PersistentStore::addUser(const User& user){
 		{"institution",AttributeValue(user.institution)},
 		{"sshKey",AttributeValue(user.sshKey)},
 		{"joinDate",AttributeValue(user.joinDate)},
+		{"lastUseTime",AttributeValue(user.lastUseTime)},
 		{"superuser",AttributeValue().SetBool(user.superuser)},
 		{"serviceAccount",AttributeValue().SetBool(user.serviceAccount)}
 	});
@@ -497,6 +498,7 @@ User PersistentStore::getUser(const std::string& id){
 	user.globusID=findOrThrow(item,"globusID","user record missing globusID attribute").GetS();
 	user.sshKey=findOrThrow(item,"sshKey","user record missing sshKey attribute").GetS();
 	user.joinDate=findOrThrow(item,"joinDate","user record missing joinDate attribute").GetS();
+	user.lastUseTime=findOrThrow(item,"lastUseTime","user record missing lastUseTime attribute").GetS();
 	user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
 	user.serviceAccount=findOrThrow(item,"serviceAccount","user record missing serviceAccount attribute").GetBool();
 	
@@ -557,6 +559,8 @@ User PersistentStore::findUserByToken(const std::string& token){
 	user.institution=findOrDefault(item,"institution",missingString).GetS();
 	user.globusID=findOrThrow(item,"globusID","user record missing globusID attribute").GetS();
 	user.sshKey=findOrThrow(item,"sshKey","user record missing sshKey attribute").GetS();
+	user.joinDate=findOrThrow(item,"joinDate","user record missing joinDate attribute").GetS();
+	user.lastUseTime=findOrThrow(item,"lastUseTime","user record missing lastUseTime attribute").GetS();
 	user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
 	user.serviceAccount=findOrThrow(item,"serviceAccount","user record missing serviceAccount attribute").GetBool();
 	
@@ -634,6 +638,7 @@ bool PersistentStore::updateUser(const User& user, const User& oldUser){
 	                                            {"phone",AVU().WithValue(AV(user.phone))},
 	                                            {"institution",AVU().WithValue(AV(user.institution))},
 	                                            {"sshKey",AVU().WithValue(AV(user.sshKey))},
+	                                            {"lastUseTime",AVU().WithValue(AV(user.lastUseTime))},
 	                                            {"superuser",AVU().WithValue(AV().SetBool(user.superuser))},
 	                                            {"serviceAccount",AVU().WithValue(AV().SetBool(user.serviceAccount))}
 	                                 }));
@@ -781,6 +786,8 @@ std::vector<User> PersistentStore::listUsers(){
 			user.token=findOrThrow(item,"token","user record missing token attribute").GetS();
 			user.globusID=findOrThrow(item,"globusID","user record missing globusID attribute").GetS();
 			user.sshKey=findOrThrow(item,"sshKey","user record missing sshKey attribute").GetS();
+			user.joinDate=findOrThrow(item,"joinDate","user record missing joinDate attribute").GetS();
+			user.lastUseTime=findOrThrow(item,"lastUseTime","user record missing lastUseTime attribute").GetS();
 			user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
 			user.serviceAccount=findOrThrow(item,"serviceAccount","user record missing serviceAccount attribute").GetBool();
 			collected.push_back(user);

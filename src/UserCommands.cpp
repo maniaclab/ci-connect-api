@@ -31,6 +31,7 @@ crow::response listUsers(PersistentStore& store, const crow::request& req){
 		userData.AddMember("institution", rapidjson::StringRef(user.institution.c_str()), alloc);
 		userData.AddMember("unix_name", user.unixName, alloc);
 		userData.AddMember("join_date", user.joinDate, alloc);
+		userData.AddMember("last_use_time", user.lastUseTime, alloc);
 		userResult.AddMember("metadata", userData, alloc);
 		resultItems.PushBack(userResult, alloc);
 	}
@@ -156,6 +157,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	targetUser.superuser=body["metadata"]["superuser"].GetBool();
 	targetUser.serviceAccount=body["metadata"]["service_account"].GetBool();
 	targetUser.joinDate=timestamp();
+	targetUser.lastUseTime=targetUser.joinDate;
 	targetUser.valid=true;
 	
 	if(store.findUserByGlobusID(targetUser.globusID)){
@@ -243,6 +245,7 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 	metadata.AddMember("public_key", targetUser.sshKey, alloc);
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
 	metadata.AddMember("join_date", targetUser.joinDate, alloc);
+	metadata.AddMember("last_use_time", user.lastUseTime, alloc);
 	metadata.AddMember("superuser", targetUser.superuser, alloc);
 	metadata.AddMember("service_account", targetUser.serviceAccount, alloc);
 	rapidjson::Value groupMemberships(rapidjson::kArrayType);
@@ -741,4 +744,29 @@ crow::response replaceUserToken(PersistentStore& store, const crow::request& req
 	result.AddMember("metadata", metadata, alloc);
 	
 	return crow::response(to_string(result));
+}
+
+crow::response updateLastUseTime(PersistentStore& store, const crow::request& req, const std::string uID){
+	//important: user is the user issuing the command, not the user being modified
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to update last use time for " << uID);
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+	//users can only be altered by admins and themselves
+	if(!user.superuser && user.unixName!=uID)
+		return crow::response(403,generateError("Not authorized"));
+	
+	User targetUser=store.getUser(uID);
+	
+	if(!targetUser)
+		return crow::response(404,generateError("User not found"));
+	
+	log_info("Updating " << targetUser << " last use time");
+	User updatedUser=targetUser;
+	updatedUser.lastUseTime=timestamp();
+	bool updated=store.updateUser(updatedUser,targetUser);
+	
+	if(!updated)
+		return crow::response(500,generateError("User account update failed"));
+	return crow::response(200);
 }

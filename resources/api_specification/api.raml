@@ -259,6 +259,38 @@ version: v1alpha1
                     "kind": "Error",
                     "message": "User not found"
                   }
+    /update_last_use_time:
+      put:
+        description: Set the user's last use time to the current time
+        queryParameters:
+          token:
+            displayName: Access Token
+            type: string
+            description: User's authentication token
+            required: true
+        responses:
+          200:
+            description: Updated user's last use time
+          403:
+            description: Authentication/authorization error
+            body:
+              application/json:
+                type: !include ErrorResultSchema.json
+                example: |
+                  {
+                    "kind": "Error",
+                    "message": "Not authorized"
+                  }
+          404:
+            description: User not found error
+            body:
+              application/json:
+                type: !include ErrorResultSchema.json
+                example: |
+                  {
+                    "kind": "Error",
+                    "message": "User not found"
+                  }
     /attributes:
       /{attribute_name}:
         get:
