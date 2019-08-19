@@ -40,6 +40,167 @@ crow::response listUsers(PersistentStore& store, const crow::request& req){
 	return crow::response(to_string(result));
 }
 
+//namespace{
+
+///Check that a string looks like one or more SSH keys. 
+///Note that this does not validate that the key type(s) claimed is(are) valid,
+///or that the key data makes any sense. 
+///\return true if string's structure appears valid
+bool validateSSHKeys(const std::string& keyData){
+	const static std::string whitespace=" \t\v"; //not including newlines!
+	const static std::string newlineChars="\n\r";
+	const static std::string base64Chars="ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	                                     "abcdefghijklmnopqrstuvwxyz"
+	                                     "0123456789+/";
+	const static char base64Padding='=';
+	
+	auto isIn=[](const std::string& set, char c)->bool{
+		return set.find(c)!=std::string::npos;
+	};
+	
+	bool seenCompleteKey=false;
+	enum State{
+		LookingForKeyType,
+		InKeyType,
+		LookingForKeyData,
+		InKeyData,
+		InKeyDataPadding,
+		LookingForCommentOrLineEnd,
+		InComment,
+	} state=LookingForKeyType;
+	
+	unsigned int keyDataLen=0, keyPaddingLen=0;
+	auto checkBase64Length=[&keyDataLen,&keyPaddingLen](){
+		return (keyDataLen+keyPaddingLen)%4==0;
+	};
+	
+	for(const char c : keyData){
+		switch(state){
+			case LookingForKeyType:
+				//Consume whitespace and newlines until something which could be 
+				//a key type is found
+				if(isIn(newlineChars,c) || isIn(whitespace,c)){
+					//ignore, state remains same
+				}
+				else
+					state=InKeyType;
+				break;
+			case InKeyType:
+				//Consume non-whitespace characters until the next whitespace is 
+				//reached. Reject newlines. 
+				if(isIn(newlineChars,c)){
+					//std::cout << "Illegal newline in key type" << std::endl;
+					return false; //no newline allowed here
+				}
+				else if(isIn(whitespace,c))
+					state=LookingForKeyData; //end of key type
+				//otherwise state remains same
+				break;
+			case LookingForKeyData:
+				//Consume whitespace, but reject newlines. 
+				if(isIn(newlineChars,c)){
+					//std::cout << "Illegal newline before key data" << std::endl;
+					return false; //no newline allowed here
+				}
+				else if(isIn(whitespace,c)){
+					//no state change
+				}
+				else{
+					keyDataLen=1;
+					keyPaddingLen=0;
+					state=InKeyData;
+				}
+				break;
+			case InKeyData:
+				//Consume non-whitespace. 
+				if(isIn(base64Chars,c)){
+					keyDataLen++;
+					//no state change
+				}
+				else if(c==base64Padding){
+					keyPaddingLen=1;
+					state=InKeyDataPadding;
+				}
+				else if(isIn(whitespace,c)){
+					if(!checkBase64Length()){
+						//std::cout << "Base64 encoding has wrong length (InKeyData->whitespace): " << (keyDataLen+keyPaddingLen) << std::endl;
+						return false; //wrong length/padding for base64
+					}
+					seenCompleteKey=true;
+					state=LookingForCommentOrLineEnd;
+				}
+				else if(isIn(newlineChars,c)){
+					if(!checkBase64Length()){
+						//std::cout << "Base64 encoding has wrong length (InKeyData->newline): " << (keyDataLen+keyPaddingLen) << std::endl;
+						return false; //wrong length/padding for base64
+					}
+					seenCompleteKey=true;
+					state=LookingForKeyType;
+				}
+				else{ //illegal character
+					std::cout << "Illegal character in key data" << std::endl;
+					return false;
+				}
+				break;
+			case InKeyDataPadding:
+				//Consume padding characters. 
+				if(c==base64Padding){
+					keyPaddingLen++;
+					//no state change
+				}
+				else if(isIn(whitespace,c)){
+					if(!checkBase64Length()){
+						//std::cout << "Base64 encoding has wrong length (InKeyDataPadding->whitespace): " << (keyDataLen+keyPaddingLen) << std::endl;
+						return false; //wrong length/padding for base64
+					}
+					seenCompleteKey=true;
+					state=LookingForCommentOrLineEnd;
+				}
+				else if(isIn(newlineChars,c)){
+					if(!checkBase64Length()){
+						//std::cout << "Base64 encoding has wrong length (InKeyDataPadding->newline): " << (keyDataLen+keyPaddingLen) << std::endl;
+						return false; //wrong length/padding for base64
+					}
+					seenCompleteKey=true;
+					state=LookingForKeyType;
+				}
+				else{ //illegal character
+					//std::cout << "Illegal character in key padding" << std::endl;
+					return false;
+				}
+				break;
+			case LookingForCommentOrLineEnd:
+				if(isIn(whitespace,c)){
+					//no state change
+				}
+				else if(isIn(newlineChars,c))
+					state=LookingForKeyType;
+				else
+					state=InComment;
+				break;
+			case InComment:
+				//Consume everything, waiting for a newline
+				if(isIn(newlineChars,c))
+					state=LookingForKeyType;
+				else{
+					//no state change
+				}
+				break;
+		}
+	}
+	if(!seenCompleteKey && (state==InKeyData || state==InKeyDataPadding)){
+		//data ended, but we may have seen a whole, valid key anyway
+		if(!checkBase64Length())
+			std::cout << "Base64 encoding has wrong length (truncated)" << std::endl;
+		return checkBase64Length();
+	}
+	if(!seenCompleteKey)
+		std::cout << "Did not read a complete key entry" << std::endl;
+	return seenCompleteKey;
+}
+
+//}
+
 crow::response createUser(PersistentStore& store, const crow::request& req){
 	//important: user is the user issuing the command, not the user being modified
 	const User user=authenticateUser(store, req.url_params.get("token"));
@@ -152,8 +313,13 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	targetUser.email=body["metadata"]["email"].GetString();
 	targetUser.phone=body["metadata"]["phone"].GetString();
 	targetUser.institution=body["metadata"]["institution"].GetString();
-	if(body["metadata"].HasMember("public_key"))
+	if(body["metadata"].HasMember("public_key")){
 		targetUser.sshKey=body["metadata"]["public_key"].GetString();
+		if(!validateSSHKeys(targetUser.sshKey)){
+			log_warn("Malformed SSH key(s)");
+			return crow::response(400,generateError("Malformed SSH key(s)"));
+		}
+	}
 	else
 		targetUser.sshKey=" "; //dummy data to keep dynamo happy
 	targetUser.unixName=body["metadata"]["unix_name"].GetString();
@@ -322,6 +488,10 @@ crow::response updateUser(PersistentStore& store, const crow::request& req, cons
 		if(!body["metadata"]["public_key"].IsString())
 			return crow::response(400,generateError("Incorrect type for user public key"));
 		updatedUser.sshKey=body["metadata"]["public_key"].GetString();
+		if(!validateSSHKeys(updatedUser.sshKey)){
+			log_warn("Malformed SSH key(s)");
+			return crow::response(400,generateError("Malformed SSH key(s)"));
+		}
 	}
 	if(body["metadata"].HasMember("superuser")){
 		if(!body["metadata"]["superuser"].IsBool())

@@ -30,5 +30,7 @@ crow::response replaceUserToken(PersistentStore& store, const crow::request& req
                                 const std::string uID);
 crow::response updateLastUseTime(PersistentStore& store, const crow::request& req,
                                  const std::string uID);
+                                 
+bool validateSSHKeys(const std::string& keyData);
 
 #endif //SLATE_USER_COMMANDS_H
