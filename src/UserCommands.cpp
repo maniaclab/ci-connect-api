@@ -22,7 +22,6 @@ crow::response listUsers(PersistentStore& store, const crow::request& req){
 	resultItems.Reserve(users.size(), alloc);
 	for(const User& user : users){
 		rapidjson::Value userResult(rapidjson::kObjectType);
-		userResult.AddMember("apiVersion", "v1alpha1", alloc);
 		userResult.AddMember("kind", "User", alloc);
 		rapidjson::Value userData(rapidjson::kObjectType);
 		userData.AddMember("name", rapidjson::StringRef(user.name.c_str()), alloc);
