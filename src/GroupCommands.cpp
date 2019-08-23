@@ -149,6 +149,7 @@ crow::response listGroups(PersistentStore& store, const crow::request& req){
 		groupResult.AddMember("phone", group.phone, alloc);
 		groupResult.AddMember("purpose", group.purpose, alloc);
 		groupResult.AddMember("description", group.description, alloc);
+		groupResult.AddMember("creation_date", group.creationDate, alloc);
 		resultItems.PushBack(groupResult, alloc);
 	}
 	result.AddMember("groups", resultItems, alloc);
@@ -256,7 +257,7 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		group.phone=" "; //Dynamo will get upset if a string is empty
 	
 	if(body["metadata"].HasMember("purpose"))
-		group.purpose=normalizeScienceField(body["metadata"]["purpose"].GetString());
+		group.purpose=body["metadata"]["purpose"].GetString();//normalizeScienceField(body["metadata"]["purpose"].GetString());
 	if(group.purpose.empty())
 		return crow::response(400,generateError("Unrecognized value for Group purpose\n"
 		  "See http://slateci.io/docs/science-fields for a list of accepted values"));
@@ -267,7 +268,7 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		group.description=" "; //Dynamo will get upset if a string is empty
 	
 	if(body["metadata"].HasMember("additional_attributes")){
-		for(const auto& entry : body["metadata"].GetObject()){
+		for(const auto& entry : body["metadata"]["additional_attributes"].GetObject()){
 			if(!entry.value.IsString())
 				return crow::response(400,generateError("Incorrect type for Group additional attribute value"));
 			extraAttributes[entry.name.GetString()]=entry.value.GetString();
@@ -351,6 +352,7 @@ crow::response getGroupInfo(PersistentStore& store, const crow::request& req, st
 	metadata.AddMember("phone", group.phone, alloc);
 	metadata.AddMember("purpose", group.purpose, alloc);
 	metadata.AddMember("description", group.description, alloc);
+	metadata.AddMember("creation_date", group.creationDate, alloc);
 	result.AddMember("kind", "Group", alloc);
 	result.AddMember("metadata", metadata, alloc);
 	

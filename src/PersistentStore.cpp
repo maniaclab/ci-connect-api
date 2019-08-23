@@ -1481,7 +1481,7 @@ Group PersistentStore::getGroup(const std::string& groupName){
 	if(item.count("requester"))
 		group.pending=true;
 	else
-		group.description=findOrThrow(item,"creationDate","Group record missing creation date attribute").GetS();
+		group.creationDate=findOrThrow(item,"creationDate","Group record missing creation date attribute").GetS();
 	
 	//update caches
 	CacheRecord<Group> record(group,groupCacheValidity);

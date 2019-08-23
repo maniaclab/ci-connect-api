@@ -224,7 +224,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	}
 	
 	if(body.IsNull()){
-		log_warn("User creation request body was null");
+		log_warn("User creation request body was null; raw data:\n" << req.body);
 		return crow::response(400,generateError("Invalid JSON in request body"));
 	}
 	if(!body.HasMember("metadata")){
@@ -308,10 +308,30 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	User targetUser;
 	targetUser.token=idGenerator.generateUserToken();
 	targetUser.globusID=body["metadata"]["globusID"].GetString();
+	if(targetUser.globusID.empty()){
+		log_warn("User globusID was emtpy");
+		return crow::response(400,generateError("Empty user Globus ID"));
+	}
 	targetUser.name=body["metadata"]["name"].GetString();
+	if(targetUser.name.empty()){
+		log_warn("User name was emtpy");
+		return crow::response(400,generateError("Empty user name"));
+	}
 	targetUser.email=body["metadata"]["email"].GetString();
+	if(targetUser.email.empty()){
+		log_warn("User email was emtpy");
+		return crow::response(400,generateError("Empty user email address"));
+	}
 	targetUser.phone=body["metadata"]["phone"].GetString();
+	if(targetUser.phone.empty()){
+		log_warn("User phone was emtpy");
+		return crow::response(400,generateError("Empty user phone number"));
+	}
 	targetUser.institution=body["metadata"]["institution"].GetString();
+	if(targetUser.institution.empty()){
+		log_warn("User institution was emtpy");
+		return crow::response(400,generateError("Empty user institution name"));
+	}
 	if(body["metadata"].HasMember("public_key")){
 		targetUser.sshKey=body["metadata"]["public_key"].GetString();
 		if(!validateSSHKeys(targetUser.sshKey)){
@@ -322,6 +342,10 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	else
 		targetUser.sshKey=" "; //dummy data to keep dynamo happy
 	targetUser.unixName=body["metadata"]["unix_name"].GetString();
+	if(targetUser.unixName.empty()){
+		log_warn("User unixName was emtpy");
+		return crow::response(400,generateError("Empty user unix account name"));
+	}
 	targetUser.superuser=body["metadata"]["superuser"].GetBool();
 	targetUser.serviceAccount=body["metadata"]["service_account"].GetBool();
 	targetUser.joinDate=timestamp();
