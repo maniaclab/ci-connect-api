@@ -761,8 +761,8 @@ std::vector<User> PersistentStore::listUsers(){
 	Aws::DynamoDB::Model::ScanRequest request;
 	request.SetTableName(userTableName);
 	//Ignore group membership records
-	request.SetFilterExpression("attribute_not_exists(#groupName)");
-	request.SetExpressionAttributeNames({{"#groupName", "groupName"}});
+	request.SetFilterExpression("attribute_not_exists(#groupName) and attribute_not_exists(#secondAttr)");
+	request.SetExpressionAttributeNames({{"#groupName", "groupName"},{"#secondAttr", "secondaryAttribute"}});
 	bool keepGoing=false;
 	
 	do{
@@ -1341,8 +1341,8 @@ std::vector<Group> PersistentStore::listGroups(){
 	databaseScans++;
 	Aws::DynamoDB::Model::ScanRequest request;
 	request.SetTableName(groupTableName);
-	request.SetFilterExpression("attribute_not_exists(#requester)");
-	request.SetExpressionAttributeNames({{"#requester", "requester"}});
+	request.SetFilterExpression("attribute_not_exists(#requester) and attribute_not_exists(#secondAttr)");
+	request.SetExpressionAttributeNames({{"#requester", "requester"},{"#secondAttr", "secondaryAttribute"}});
 	bool keepGoing=false;
 	
 	do{
@@ -1400,8 +1400,8 @@ std::vector<GroupRequest> PersistentStore::listGroupRequests(){
 	databaseScans++;
 	Aws::DynamoDB::Model::ScanRequest request;
 	request.SetTableName(groupTableName);
-	request.SetFilterExpression("attribute_exists(#requester)");
-	request.SetExpressionAttributeNames({{"#requester", "requester"}});
+	request.SetFilterExpression("attribute_exists(#requester) and attribute_not_exists(#secondAttr)");
+	request.SetExpressionAttributeNames({{"#requester", "requester"},{"#secondAttr", "secondaryAttribute"}});
 	bool keepGoing=false;
 	
 	do{
