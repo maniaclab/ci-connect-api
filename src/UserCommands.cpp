@@ -728,7 +728,7 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 				break; //allowed
 			}
 			else{
-				if(!user.superuser && !requesterIsGroupAdmin)
+				if(!user.superuser && !requesterIsGroupAdmin &&!requesterIsEnclosingGroupAdmin)
 					return crow::response(403,generateError("Not authorized"));
 				break; //allowed
 			}
