@@ -752,6 +752,11 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 	//if(membership.isMember())
 	//	ensureEnclosingMembership(store,membership.userName,membership.groupName,membership.stateSetBy);	
 	
+	store.getEmailClient().sendEmail("no-reply@ci-connect.net",{targetUser.email},
+	  "Group membership change",
+	  "This is an automatic notification that your membership in the "+
+	  group.displayName+" group has been set to \""+GroupMembership::to_string(membership.state)+"\"");
+	
 	return(crow::response(200));
 }
 

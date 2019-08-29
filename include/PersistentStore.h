@@ -110,6 +110,20 @@ struct hash<std::set<T>>{
 };
 }
 
+class EmailClient{
+public:
+	EmailClient(const std::string& mailgunEndpoint, 
+	            const std::string& mailgunKey, const std::string& emailDomain);
+	bool canSendEmail() const{ return valid; }
+	bool sendEmail(const std::string& fromAddress, const std::vector<std::string>& toAddresses,
+	               const std::string& subject, const std::string& body);
+private:
+	std::string mailgunEndpoint;
+	std::string mailgunKey;
+	std::string emailDomain;
+	bool valid;
+};
+
 class PersistentStore{
 public:
 	///\param credentials the AWS credentials used for authenitcation with the 
@@ -125,7 +139,7 @@ public:
 	///                            send monitoring data
 	PersistentStore(const Aws::Auth::AWSCredentials& credentials, 
 	                const Aws::Client::ClientConfiguration& clientConfig,
-	                std::string bootstrapUserFile);
+	                std::string bootstrapUserFile, EmailClient emailClient);
 	
 	///Store a record for a new user
 	///\return Whether the user record was successfully added to the database
@@ -262,6 +276,8 @@ public:
 	
 	const User& getRootUser() const{ return rootUser; }
 	
+	EmailClient& getEmailClient(){ return emailClient; }
+	
 private:
 	///Database interface object
 	Aws::DynamoDB::DynamoDBClient dbClient;
@@ -271,6 +287,8 @@ private:
 	const std::string groupTableName;
 	
 	User rootUser;
+	
+	EmailClient emailClient;
 	
 	///duration for which cached user records should remain valid
 	const std::chrono::seconds userCacheValidity;

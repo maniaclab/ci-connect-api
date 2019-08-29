@@ -60,6 +60,9 @@ struct Configuration{
 	std::string sslCertificate;
 	std::string sslKey;
 	std::string bootstrapUserFile;
+	std::string mailgunEndpoint;
+	std::string mailgunKey;
+	std::string emailDomain;
 	
 	std::map<std::string,ParamRef> options;
 	
@@ -71,6 +74,8 @@ struct Configuration{
 	awsEndpoint("localhost:8000"),
 	portString("18080"),
 	bootstrapUserFile("base_connect_user"),
+	mailgunEndpoint("api.mailgun.net"),
+	emailDomain("api.ci-connect.net"),
 	options{
 		{"awsAccessKey",awsAccessKey},
 		{"awsSecretKey",awsSecretKey},
@@ -80,7 +85,10 @@ struct Configuration{
 		{"port",portString},
 		{"sslCertificate",sslCertificate},
 		{"sslKey",sslKey},
-		{"bootstrapUserFile",bootstrapUserFile}
+		{"bootstrapUserFile",bootstrapUserFile},
+		{"mailgunEndpoint",mailgunEndpoint},
+		{"mailgunKey",mailgunKey},
+		{"emailDomain",emailDomain}
 	}
 	{
 		//check for environment variables
@@ -291,8 +299,12 @@ int main(int argc, char* argv[]){
 	else
 		log_fatal("Unrecognized URL scheme for AWS: '" << config.awsURLScheme << '\'');
 	clientConfig.endpointOverride=config.awsEndpoint;
+	
+	EmailClient emailClient(config.mailgunEndpoint,config.mailgunKey,config.emailDomain);
+	
 	PersistentStore store(credentials,clientConfig,
-	                      config.bootstrapUserFile);
+	                      config.bootstrapUserFile,
+	                      emailClient);
 	
 	// REST server initialization
 	crow::SimpleApp server;

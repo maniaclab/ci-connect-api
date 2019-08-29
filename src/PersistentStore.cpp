@@ -25,6 +25,7 @@
 #include <aws/dynamodb/model/DescribeTableRequest.h>
 #include <aws/dynamodb/model/UpdateTableRequest.h>
 
+#include <HTTPRequests.h>
 #include <Logging.h>
 #include <ServerUtilities.h>
 
@@ -149,12 +150,38 @@ void replaceCacheRecord(Cache& cache, const Key& key, const Value& value){
 
 } //anonymous namespace
 
+EmailClient::EmailClient(const std::string& mailgunEndpoint, 
+                         const std::string& mailgunKey, 
+                         const std::string& emailDomain):
+mailgunEndpoint(mailgunEndpoint),mailgunKey(mailgunKey),emailDomain(emailDomain){
+	valid=!mailgunEndpoint.empty() && !mailgunKey.empty() && !emailDomain.empty();
+	if(!valid)
+		log_warn("Email settings are not valid; email notifications will be disabled");
+}
+
+bool EmailClient::sendEmail(const std::string& fromAddress, const std::vector<std::string>& toAddresses,
+	                        const std::string& subject, const std::string& body){
+	if(!valid)
+		return false;
+	std::string url="https://api:"+mailgunKey+"@"+mailgunEndpoint+"/v3/"+emailDomain+"/messages";
+	std::multimap<std::string,std::string> data{{"from",fromAddress},{"subject",subject},{"text",body}};
+	for(const auto& to : toAddresses)
+		data.emplace("to",to);
+	auto response=httpRequests::httpPostForm(url,data);
+	if(response.status!=200){
+		log_warn("Failed to send email: " << response.body);
+		return false;
+	}
+	return true;
+}
+
 PersistentStore::PersistentStore(const Aws::Auth::AWSCredentials& credentials, 
                                  const Aws::Client::ClientConfiguration& clientConfig,
-                                 std::string bootstrapUserFile):
+                                 std::string bootstrapUserFile, EmailClient emailClient):
 	dbClient(credentials,clientConfig),
 	userTableName("CONNECT_users"),
 	groupTableName("CONNECT_groups"),
+	emailClient(emailClient),
 	userCacheValidity(std::chrono::minutes(5)),
 	userCacheExpirationTime(std::chrono::steady_clock::now()),
 	groupCacheValidity(std::chrono::minutes(30)),
