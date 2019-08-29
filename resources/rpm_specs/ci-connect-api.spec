@@ -7,7 +7,7 @@ URL: https://github.com/maniaclab/ci-connect-api
 
 Source0: ci-connect-api-%{version}.tar.gz
 
-BuildRequires: gcc-c++ boost-devel zlib-devel openssl-devel libcurl-devel yaml-cpp-devel cmake3 aws-sdk-cpp-dynamodb-devel
+BuildRequires: gcc-c++ boost-devel zlib-devel openssl-devel libcurl-devel cmake3 aws-sdk-cpp-dynamodb-devel
 Requires: boost zlib openssl libcurl yaml-cpp aws-sdk-cpp-dynamodb-libs
 
 %description
