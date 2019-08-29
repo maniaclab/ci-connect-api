@@ -299,8 +299,8 @@ Response httpPostForm(const std::string& url,
 	using detail::reportCurlError;
 	
 	
-	curl_httppost* postData;
-	curl_httppost* postEnd;
+	curl_httppost* postData=nullptr;
+	curl_httppost* postEnd=nullptr;
 	
 	for(const auto& formItem : formData){
 		curl_formadd(&postData, &postEnd, CURLFORM_COPYNAME, formItem.first.c_str(),
