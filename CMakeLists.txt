@@ -177,9 +177,9 @@ if(BUILD_SERVER)
     ${CMAKE_SOURCE_DIR}/src/PersistentStore.cpp
     ${CMAKE_SOURCE_DIR}/src/Utilities.cpp
     ${CMAKE_SOURCE_DIR}/src/ServerUtilities.cpp
-     ${CMAKE_SOURCE_DIR}/src/UserCommands.cpp
-     ${CMAKE_SOURCE_DIR}/src/GroupCommands.cpp
-     ${CMAKE_SOURCE_DIR}/src/VersionCommands.cpp
+    ${CMAKE_SOURCE_DIR}/src/UserCommands.cpp
+    ${CMAKE_SOURCE_DIR}/src/GroupCommands.cpp
+    ${CMAKE_SOURCE_DIR}/src/VersionCommands.cpp
 #   
 #     ${CMAKE_SOURCE_DIR}/src/Archive.cpp
 #     ${CMAKE_SOURCE_DIR}/src/FileHandle.cpp
@@ -486,27 +486,19 @@ if(BUILD_SERVER)
 
 endif(BUILD_SERVER)
 
-# add_custom_target(rpm-sources 
-#   # FOO=BAR is a sacrificial dummy variable to absorb the extra 
-#   # quotes that cmake erroneously puts on the first variable
-#   COMMAND FOO=BAR 
-#     CMAKE_BINARY_DIR=${CMAKE_BINARY_DIR} 
-#     CMAKE_SOURCE_DIR=${CMAKE_SOURCE_DIR} 
-#     ${CMAKE_SOURCE_DIR}/resources/build_rpm.sh
-#   DEPENDS ${RPM_SOURCES})
-# 
-# if(BUILD_CLIENT)
-#   add_custom_target(client-rpm
-#     COMMAND rpmbuild --define "_topdir ${CMAKE_BINARY_DIR}" --define "version `${CMAKE_SOURCE_DIR}/cmake/extract_version.sh" "${CMAKE_SOURCE_DIR}`" -ba "${CMAKE_SOURCE_DIR}/resources/rpm_specs/slate-client.spec"
-#     DEPENDS rpm-sources)
-#   LIST(APPEND RPMS client-rpm)
-# endif(BUILD_CLIENT)
-# if(BUILD_SERVER)
-#   add_custom_target(server-rpm
-#     COMMAND rpmbuild --define "_topdir ${CMAKE_BINARY_DIR}" --define "version `${CMAKE_SOURCE_DIR}/cmake/extract_version.sh" "${CMAKE_SOURCE_DIR}`" -ba "${CMAKE_SOURCE_DIR}/resources/rpm_specs/slate-api-server.spec"
-#     DEPENDS rpm-sources)
-#   LIST(APPEND RPMS server-rpm)
-# endif(BUILD_SERVER)
-# 
-# add_custom_target(rpm
-#   DEPENDS ${RPMS})
+add_custom_target(rpm-sources 
+  # FOO=BAR is a sacrificial dummy variable to absorb the extra 
+  # quotes that cmake erroneously puts on the first variable
+  COMMAND FOO=BAR 
+    CMAKE_BINARY_DIR=${CMAKE_BINARY_DIR} 
+    CMAKE_SOURCE_DIR=${CMAKE_SOURCE_DIR} 
+    ${CMAKE_SOURCE_DIR}/resources/build_rpm.sh
+  DEPENDS ${RPM_SOURCES})
+
+  add_custom_target(client-rpm
+    COMMAND rpmbuild --define "_topdir ${CMAKE_BINARY_DIR}" --define "version `${CMAKE_SOURCE_DIR}/cmake/extract_version.sh" "${CMAKE_SOURCE_DIR}`" -ba "${CMAKE_SOURCE_DIR}/resources/rpm_specs/ci-connect-api.spec"
+    DEPENDS rpm-sources)
+  LIST(APPEND RPMS client-rpm)
+
+add_custom_target(rpm
+  DEPENDS ${RPMS})
