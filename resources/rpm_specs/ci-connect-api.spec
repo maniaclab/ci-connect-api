@@ -1,4 +1,4 @@
-Name: slate-api-server
+Name: ci-connect-api
 Version: %{version}
 Release: 1%{?dist}
 Summary: API server for the CI-Connect
