@@ -229,7 +229,7 @@ crow::response multiplex(crow::SimpleApp& server, PersistentStore& store, const 
 	responses.reserve(requests.size());
 	
 	for(const auto& request : requests)
-		responses.emplace_back(std::async(std::launch::async,[&](){ 
+		responses.emplace_back(std::async(std::launch::deferred,[&](){ 
 			crow::response response;
 			server.handle(request, response);
 			return response;
