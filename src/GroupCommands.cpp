@@ -323,6 +323,17 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 			return crow::response(500,generateError("Group Request creation failed"));
 		
 		log_info("Created " << gr << " on behalf of " << user);
+		
+		//inform people of the request
+		EmailClient::Email message;
+		message.fromAddress="no-reply@ci-connect.net";
+		message.toAddresses={group.email};
+		message.ccAddresses={user.email};
+		message.subject="CI-Connect group creation request";
+		message.body="This is an automatic notification that "+user.name+
+		" ("+user.unixName+") has requested to create a subgroup, "+gr.displayName+
+		" ("+gr.name+") within the "+parentGroup.displayName+" group.";
+		store.getEmailClient().sendEmail(message);
 	}
 	
 	return crow::response(200);
@@ -606,6 +617,8 @@ crow::response approveSubgroupRequest(PersistentStore& store, const crow::reques
 		return crow::response(400,generateError("Group already exists"));
 	
 	GroupRequest newGroupRequest = store.getGroupRequest(newGroupName);
+	if(!newGroupRequest)
+		return crow::response(404,generateError("Group request not found"));
 	
 	log_info("Approving creation of subgroup " << newGroupName);
 	bool success=store.approveGroupRequest(newGroupName);
@@ -627,8 +640,21 @@ crow::response approveSubgroupRequest(PersistentStore& store, const crow::reques
 		return crow::response(500,generateError(problem));
 	}
 	
-	if (!success)
+	if(!success)
 		return crow::response(500, generateError("Storing group request approval failed"));
+	
+	//inform the person who made the request
+	User requestingUser=store.getUser(newGroupRequest.requester);
+	if(requestingUser){
+		EmailClient::Email message;
+		message.fromAddress="no-reply@ci-connect.net";
+		message.toAddresses={requestingUser.email};
+		message.subject="CI-Connect group creation request approved";
+		message.body="This is an automatic notification that your request to create the group, "+
+		newGroupRequest.displayName+" ("+newGroupRequest.name+
+		") has been approved and you are now an administrator of this group.";
+		store.getEmailClient().sendEmail(message);
+	}
 	
 	return(crow::response(200));
 }
@@ -645,14 +671,27 @@ crow::response denySubgroupRequest(PersistentStore& store, const crow::request& 
 		return crow::response(403,generateError("Not authorized"));
 	
 	newGroupName=canonicalizeGroupName(newGroupName);
-	Group newGroup = store.getGroup(newGroupName);
-	if(!newGroup.pending)
-		return crow::response(400,generateError("Group already exists"));
+	GroupRequest newGroupRequest = store.getGroupRequest(newGroupName);
+	if(!newGroupRequest)
+		return crow::response(404,generateError("Group request not found"));
 	
 	bool success = store.removeGroup(newGroupName);
 	
 	if (!success)
 		return crow::response(500, generateError("Deleting group request failed"));
+	
+	//inform the person who made the request
+	User requestingUser=store.getUser(newGroupRequest.requester);
+	if(requestingUser){
+		EmailClient::Email message;
+		message.fromAddress="no-reply@ci-connect.net";
+		message.toAddresses={requestingUser.email};
+		message.subject="CI-Connect group creation request denied";
+		message.body="This is an automatic notification that your request to create the group, "+
+		newGroupRequest.displayName+" ("+newGroupRequest.name+
+		") has been denied by the enclosing group administrators.";
+		store.getEmailClient().sendEmail(message);
+	}
 	
 	return(crow::response(200));
 }

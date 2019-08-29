@@ -112,11 +112,19 @@ struct hash<std::set<T>>{
 
 class EmailClient{
 public:
+	struct Email{
+		std::string fromAddress;
+		std::vector<std::string> toAddresses;
+		std::vector<std::string> ccAddresses;
+		std::vector<std::string> bccAddresses;
+		std::string subject;
+		std::string body;
+	};
+
 	EmailClient(const std::string& mailgunEndpoint, 
 	            const std::string& mailgunKey, const std::string& emailDomain);
 	bool canSendEmail() const{ return valid; }
-	bool sendEmail(const std::string& fromAddress, const std::vector<std::string>& toAddresses,
-	               const std::string& subject, const std::string& body);
+	bool sendEmail(const Email& email);
 private:
 	std::string mailgunEndpoint;
 	std::string mailgunKey;

@@ -752,10 +752,26 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 	//if(membership.isMember())
 	//	ensureEnclosingMembership(store,membership.userName,membership.groupName,membership.stateSetBy);	
 	
-	store.getEmailClient().sendEmail("no-reply@ci-connect.net",{targetUser.email},
-	  "Group membership change",
-	  "This is an automatic notification that your membership in the "+
-	  group.displayName+" group has been set to \""+GroupMembership::to_string(membership.state)+"\"");
+	//If the user is requesting to join a group, notify the group admins. 
+	if(currentStatus.state==GroupMembership::NonMember && membership.state==GroupMembership::Pending){
+		EmailClient::Email message;
+		message.fromAddress="no-reply@ci-connect.net";
+		message.toAddresses={group.email};
+		message.ccAddresses={targetUser.email};
+		message.subject="CI-Connect group membership request";
+		message.body="This is an automatic notification that "+targetUser.name+
+		" ("+targetUser.unixName+") has requested to join the "+group.displayName+" group.";
+		store.getEmailClient().sendEmail(message);
+	}
+	else{ //otherwise just inform the user
+		EmailClient::Email message;
+		message.fromAddress="no-reply@ci-connect.net";
+		message.toAddresses={targetUser.email};
+		message.subject="CI-Connect group membership change";
+		message.body="This is an automatic notification that your membership in the "+
+		group.displayName+" group has been set to \""+GroupMembership::to_string(membership.state)+"\".";
+		store.getEmailClient().sendEmail(message);
+	}
 	
 	return(crow::response(200));
 }
@@ -776,12 +792,34 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 	   store.userStatusInGroup(user.unixName,groupID).state!=GroupMembership::Admin &&
 	   adminInAnyEnclosingGroup(store,user.unixName,groupID).empty())
 		return crow::response(403,generateError("Not authorized"));
+		
+	auto currentStatus=store.userStatusInGroup(targetUser.unixName,groupID);
 	
 	log_info("Removing " << targetUser << " from " << groupID);
 	bool success=store.removeUserFromGroup(uID,groupID);
 	
 	if(!success)
 		return crow::response(500,generateError("User removal from Group failed"));
+		
+	if(currentStatus.state==GroupMembership::Pending){
+		EmailClient::Email message;
+		message.fromAddress="no-reply@ci-connect.net";
+		message.toAddresses={targetUser.email};
+		message.subject="CI-Connect group membership request denied";
+		message.body="This is an automatic notification that your request to join the "+
+		groupID+" group has been denied by the group administrators.";
+		store.getEmailClient().sendEmail(message);
+	}
+	else{
+		EmailClient::Email message;
+		message.fromAddress="no-reply@ci-connect.net";
+		message.toAddresses={targetUser.email};
+		message.subject="CI-Connect group membership change";
+		message.body="This is an automatic notification that your account has been removed from the "+
+		groupID+" group.";
+		store.getEmailClient().sendEmail(message);
+	}
+	
 	return(crow::response(200));
 }
 

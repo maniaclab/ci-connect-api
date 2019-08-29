@@ -159,14 +159,21 @@ mailgunEndpoint(mailgunEndpoint),mailgunKey(mailgunKey),emailDomain(emailDomain)
 		log_warn("Email settings are not valid; email notifications will be disabled");
 }
 
-bool EmailClient::sendEmail(const std::string& fromAddress, const std::vector<std::string>& toAddresses,
-	                        const std::string& subject, const std::string& body){
+bool EmailClient::sendEmail(const Email& email){
 	if(!valid)
 		return false;
 	std::string url="https://api:"+mailgunKey+"@"+mailgunEndpoint+"/v3/"+emailDomain+"/messages";
-	std::multimap<std::string,std::string> data{{"from",fromAddress},{"subject",subject},{"text",body}};
-	for(const auto& to : toAddresses)
+	std::multimap<std::string,std::string> data{
+		{"from",email.fromAddress},
+		{"subject",email.subject},
+		{"text",email.body}
+	};
+	for(const auto& to : email.toAddresses)
 		data.emplace("to",to);
+	for(const auto& cc : email.ccAddresses)
+		data.emplace("cc",cc);
+	for(const auto& bcc : email.bccAddresses)
+		data.emplace("bcc",bcc);
 	auto response=httpRequests::httpPostForm(url,data);
 	if(response.status!=200){
 		log_warn("Failed to send email: " << response.body);
