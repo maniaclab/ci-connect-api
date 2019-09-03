@@ -1611,6 +1611,7 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 	
 	{ //make sure no old, incorrect cache entries persist
 		groupCache.erase(groupName);
+		groupRequestCache.erase(groupName);
 		groupMembershipByGroupCache.erase(groupName);
 	}
 	

@@ -805,7 +805,8 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 		if(membership.groupName.find(groupID)==0){
 			if(membership.groupName==groupID) //exact match for the target group
 				continue; //we'll come back to this one
-			bool success=store.removeUserFromGroup(uID,groupID);
+			log_info("Removing " << targetUser << " from subgroup " << membership.groupName);
+			bool success=store.removeUserFromGroup(uID,membership.groupName);
 			if(!success)
 				return crow::response(500,generateError("User removal from Group failed"));
 		}
