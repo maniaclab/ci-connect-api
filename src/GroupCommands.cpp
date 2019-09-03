@@ -619,6 +619,17 @@ crow::response approveSubgroupRequest(PersistentStore& store, const crow::reques
 	GroupRequest newGroupRequest = store.getGroupRequest(newGroupName);
 	if(!newGroupRequest)
 		return crow::response(404,generateError("Group request not found"));
+		
+	//ensure that the person who made the request is still a member in good 
+	//standing of the parent group
+	auto requestorStatus=store.userStatusInGroup(newGroupRequest.requester,parentGroupName);
+	if(requestorStatus.state!=GroupMembership::Active &&
+	   requestorStatus.state!=GroupMembership::Admin){
+		bool success=store.removeGroup(newGroupRequest.name);	
+		if (!success)
+			log_error("Deleting invalid group request failed");
+		return crow::response(400,generateError("User who requested subgroup creation is no longer a member of the enclosing group"));
+	}
 	
 	log_info("Approving creation of subgroup " << newGroupName);
 	bool success=store.approveGroupRequest(newGroupName);

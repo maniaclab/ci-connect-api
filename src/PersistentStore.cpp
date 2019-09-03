@@ -1221,6 +1221,7 @@ bool PersistentStore::removeGroup(const std::string& groupName){
 	//erase cache entries
 	{
 		groupCache.erase(groupName);
+		groupRequestCache.erase(groupName);
 		groupMembershipByGroupCache.erase(groupName);
 	}
 	
