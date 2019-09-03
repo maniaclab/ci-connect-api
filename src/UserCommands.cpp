@@ -787,17 +787,31 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 	if(!targetUser)
 		return crow::response(404,generateError("User not found"));
 	
+	groupID=canonicalizeGroupName(groupID);
+	
 	//Only allow superusers and admins of the Group to remove user from it
 	if(!user.superuser && 
 	   store.userStatusInGroup(user.unixName,groupID).state!=GroupMembership::Admin &&
 	   adminInAnyEnclosingGroup(store,user.unixName,groupID).empty())
 		return crow::response(403,generateError("Not authorized"));
-		
+	
 	auto currentStatus=store.userStatusInGroup(targetUser.unixName,groupID);
 	
 	log_info("Removing " << targetUser << " from " << groupID);
+	//first, remove the user from any subgroups of the group in question
+	std::vector<GroupMembership> memberships = store.getUserGroupMemberships(uID);
+	for(const auto& membership : memberships){
+		//find all memberships within the target group
+		if(membership.groupName.find(groupID)==0){
+			if(membership.groupName==groupID) //exact match for the target group
+				continue; //we'll come back to this one
+			bool success=store.removeUserFromGroup(uID,groupID);
+			if(!success)
+				return crow::response(500,generateError("User removal from Group failed"));
+		}
+	}
+	//finally, do the removal from the target group
 	bool success=store.removeUserFromGroup(uID,groupID);
-	
 	if(!success)
 		return crow::response(500,generateError("User removal from Group failed"));
 		
