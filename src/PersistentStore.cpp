@@ -1585,6 +1585,7 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 		return false;
 	}
 	
+	std::string creationDate=timestamp();
 	using AV=Aws::DynamoDB::Model::AttributeValue;
 	using AVU=Aws::DynamoDB::Model::AttributeValueUpdate;
 	auto outcome=dbClient.UpdateItem(Aws::DynamoDB::Model::UpdateItemRequest()
@@ -1594,7 +1595,7 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 	                                 .WithAttributeUpdates({
 	                                            {"requester",AVU().WithAction(Aws::DynamoDB::Model::AttributeAction::DELETE_)},
 	                                            {"secondaryAttributes",AVU().WithAction(Aws::DynamoDB::Model::AttributeAction::DELETE_)},
-	                                            {"creationDate",AVU().WithValue(AV(timestamp()))},
+	                                            {"creationDate",AVU().WithValue(AV(creationDate))},
 	                                            })
 	                                 );
 	if(!outcome.IsSuccess()){
@@ -1613,6 +1614,10 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 		groupCache.erase(groupName);
 		groupRequestCache.erase(groupName);
 		groupMembershipByGroupCache.erase(groupName);
+	}
+	{ //update the group cache
+		CacheRecord<Group> record(Group(gr,creationDate),groupCacheValidity);
+		replaceCacheRecord(groupCache,gr.name,record);
 	}
 	
 	return true;

@@ -37,9 +37,12 @@ bool operator==(const User& u1, const User& u2);
 bool operator!=(const User& u1, const User& u2);
 std::ostream& operator<<(std::ostream& os, const User& u);
 
+struct GroupRequest;
+
 struct Group{
 	Group():valid(false),pending(false){}
 	explicit Group(std::string name):valid(true),name(std::move(name)),pending(false){}
+	explicit Group(const GroupRequest& gr, std::string creationDate);
 	
 	///Indicates whether the Group exists/is valid
 	bool valid;
