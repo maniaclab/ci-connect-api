@@ -271,7 +271,11 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		for(const auto& entry : body["metadata"]["additional_attributes"].GetObject()){
 			if(!entry.value.IsString())
 				return crow::response(400,generateError("Incorrect type for Group additional attribute value"));
-			extraAttributes[entry.name.GetString()]=entry.value.GetString();
+			std::string key=entry.name.GetString();
+			std::string value=entry.value.GetString();
+			if(key.empty() || value.empty())
+				return crow::response(400,generateError("Additional group attribute keys and values cannot be empty strings"));
+			extraAttributes[key]=value;
 		}
 	}
 	
