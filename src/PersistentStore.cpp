@@ -193,6 +193,7 @@ PersistentStore::PersistentStore(const Aws::Auth::AWSCredentials& credentials,
 	userCacheExpirationTime(std::chrono::steady_clock::now()),
 	groupCacheValidity(std::chrono::minutes(30)),
 	groupCacheExpirationTime(std::chrono::steady_clock::now()),
+	groupRequestCacheExpirationTime(std::chrono::steady_clock::now()),
 	cacheHits(0),databaseQueries(0),databaseScans(0)
 {
 	log_info("Starting database client");
@@ -1201,10 +1202,9 @@ bool PersistentStore::addGroupRequest(const GroupRequest& gr){
 		return false;
 	}
 	
-	//???
 	//update caches
-	//CacheRecord<Group> record(group,groupCacheValidity);
-	//replaceCacheRecord(groupCache,group.name,record);
+	CacheRecord<GroupRequest> record(gr,groupCacheValidity);
+	replaceCacheRecord(groupRequestCache,gr.name,record);
         
 	return true;
 }
@@ -1526,17 +1526,17 @@ Group PersistentStore::getGroup(const std::string& groupName){
 }
 
 GroupRequest PersistentStore::getGroupRequest(const std::string& groupName){
-	/*//first see if we have this cached
+	//first see if we have this cached
 	{
-		CacheRecord<Group> record;
-		if(groupCache.find(groupName,record)){
+		CacheRecord<GroupRequest> record;
+		if(groupRequestCache.find(groupName,record)){
 			//we have a cached record; is it still valid?
 			if(record){ //it is, just return it
 				cacheHits++;
 				return record;
 			}
 		}
-	}*/
+	}
 	//need to query the database
 	databaseQueries++;
 	log_info("Querying database for Group " << groupName);
