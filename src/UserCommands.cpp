@@ -334,7 +334,9 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	}
 	if(body["metadata"].HasMember("public_key")){
 		targetUser.sshKey=body["metadata"]["public_key"].GetString();
-		if(!validateSSHKeys(targetUser.sshKey)){
+		if(targetUser.sshKey.empty())
+			targetUser.sshKey=" "; //dummy data to keep dynamo happy
+		else if(!validateSSHKeys(targetUser.sshKey)){
 			log_warn("Malformed SSH key(s)");
 			return crow::response(400,generateError("Malformed SSH key(s)"));
 		}
@@ -511,7 +513,9 @@ crow::response updateUser(PersistentStore& store, const crow::request& req, cons
 		if(!body["metadata"]["public_key"].IsString())
 			return crow::response(400,generateError("Incorrect type for user public key"));
 		updatedUser.sshKey=body["metadata"]["public_key"].GetString();
-		if(!validateSSHKeys(updatedUser.sshKey)){
+		if(updatedUser.sshKey.empty())
+			updatedUser.sshKey=" ";
+		else if(!validateSSHKeys(updatedUser.sshKey)){
 			log_warn("Malformed SSH key(s)");
 			return crow::response(400,generateError("Malformed SSH key(s)"));
 		}
