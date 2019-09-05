@@ -227,6 +227,8 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	group.name=newGroupName;
 	if(group.name.empty())
 		return crow::response(400,generateError("Group names may not be the empty string"));
+	if(group.name.find('.')!=std::string::npos)
+		return crow::response(400,generateError("Group names may not contain the '.' character"));
 	
 	if(body["metadata"].HasMember("display_name")){
 		log_info("Getting display name from request");
@@ -331,7 +333,7 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		//inform people of the request
 		EmailClient::Email message;
 		message.fromAddress="no-reply@ci-connect.net";
-		message.toAddresses={group.email};
+		message.toAddresses={parentGroup.email};
 		message.ccAddresses={user.email};
 		message.subject="CI-Connect group creation request";
 		message.body="This is an automatic notification that "+user.name+
