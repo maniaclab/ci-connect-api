@@ -18,7 +18,7 @@
         "display_name": {
           "type": "string"
         },
-        "field_of_science": {
+        "purpose": {
           "type": "string"
         },
         "email": {
@@ -28,15 +28,6 @@
           "type": "string"
         },
         "description": {
-          "type": "string"
-        },
-        "PI_name": {
-          "type": "string"
-        },
-        "PI_email": {
-          "type": "string"
-        },
-        "PI_organization": {
           "type": "string"
         }
       }
