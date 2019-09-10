@@ -225,10 +225,19 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	
 	//TODO: update name validation
 	group.name=newGroupName;
-	if(group.name.empty())
+	//Group names must conform to /[a-zA-Z0-9_][a-zA-Z0-9_-]*/
+	std::string unqualifiedGroupName=lastGroupComponent(group.name);
+	if(unqualifiedGroupName.empty())
 		return crow::response(400,generateError("Group names may not be the empty string"));
-	if(group.name.find('.')!=std::string::npos)
-		return crow::response(400,generateError("Group names may not contain the '.' character"));
+	const static std::string groupNameLeadCharacters=
+		"abcdefghijklmnopqrstuvwxyz"
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		"0123456789_";
+	const static std::string groupNameFollowingCharacters=groupNameLeadCharacters+"-";
+	//take advange of the following charatcer set being a superset of the lead character set
+	if(groupNameLeadCharacters.find(unqualifiedGroupName[0])==std::string::npos
+	  || unqualifiedGroupName.find_first_not_of(groupNameFollowingCharacters)!=std::string::npos)
+		return crow::response(400,generateError("Group names must match the regular expression [a-zA-Z0-9_][a-zA-Z0-9_-]*"));
 	
 	if(body["metadata"].HasMember("display_name")){
 		log_info("Getting display name from request");
