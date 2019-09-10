@@ -234,7 +234,7 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 		"0123456789_";
 	const static std::string groupNameFollowingCharacters=groupNameLeadCharacters+"-";
-	//take advange of the following charatcer set being a superset of the lead character set
+	//take advantage of the following character set being a superset of the lead character set
 	if(groupNameLeadCharacters.find(unqualifiedGroupName[0])==std::string::npos
 	  || unqualifiedGroupName.find_first_not_of(groupNameFollowingCharacters)!=std::string::npos)
 		return crow::response(400,generateError("Group names must match the regular expression [a-zA-Z0-9_][a-zA-Z0-9_-]*"));
