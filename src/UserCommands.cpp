@@ -564,6 +564,19 @@ crow::response deleteUser(PersistentStore& store, const crow::request& req, cons
 	
 	if(!deleted)
 		return crow::response(500,generateError("User account deletion failed"));
+	
+	//send email notification
+	EmailClient::Email message;
+	message.fromAddress="no-reply@ci-connect.net";
+	message.toAddresses={targetUser.email};
+	message.subject="CI-Connect account deleted";
+	message.body="This is an automatic notification that your CI-Connect user "
+	"account ("+targetUser.unixName+") has been deleted";
+	if(user!=targetUser)
+		message.body+=" by "+user.name;
+	message.body+=".";
+	store.getEmailClient().sendEmail(message);	
+	
 	return(crow::response(200));
 }
 

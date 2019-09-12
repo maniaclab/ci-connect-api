@@ -479,12 +479,30 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, std
 	
 	if(!targetGroup)
 		return crow::response(404,generateError("Group not found"));
+		
+	//collect all members of the group before deleting it
+	auto memberships=store.getMembersOfGroup(targetGroup.name);
+	//figure out parent group
+	const Group parentGroup=store.getGroup(enclosingGroup(groupName));
 	
 	log_info("Deleting " << targetGroup);
 	bool deleted = store.removeGroup(targetGroup.name);
 
 	if (!deleted)
 		return crow::response(500, generateError("Group deletion failed"));
+	
+	//email parent group contact and all members of deleted group
+	EmailClient::Email message;
+	message.fromAddress="no-reply@ci-connect.net";
+	message.toAddresses={parentGroup.email};
+	message.bccAddresses.reserve(memberships.size());
+	for(const auto& membership : memberships)
+		message.bccAddresses.push_back(store.getUser(membership.userName).email);
+	message.subject="CI-Connect group deleted";
+	message.body="This is an automatic notification that "+user.name+
+	" ("+user.unixName+") has deleted the "+targetGroup.displayName+
+	" ("+targetGroup.name+") from the "+parentGroup.displayName+" group.";
+	store.getEmailClient().sendEmail(message);
 	
 	return(crow::response(200));
 }
