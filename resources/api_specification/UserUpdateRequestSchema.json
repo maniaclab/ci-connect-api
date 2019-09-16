@@ -27,11 +27,11 @@
         "public_key": {
           "type": "string"
         },
-        "unix_name": {
-          "type": "string"
-        },
         "superuser": {
           "type": "boolean"
+        },
+        "globusID": {
+          "type": "string"
         }
       }
     }

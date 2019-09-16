@@ -528,6 +528,11 @@ crow::response updateUser(PersistentStore& store, const crow::request& req, cons
 		if(user.superuser)
 			updatedUser.superuser=body["metadata"]["superuser"].GetBool();
 	}
+	if(body["metadata"].HasMember("globusID")){
+		if(!body["metadata"]["globusID"].IsString())
+			return crow::response(400,generateError("Incorrect type for user globus ID"));
+		updatedUser.globusID=body["metadata"]["globusID"].GetString();
+	}
 	
 	log_info("Updating " << targetUser << " info");
 	bool updated=store.updateUser(updatedUser,targetUser);
