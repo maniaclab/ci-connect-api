@@ -25,6 +25,7 @@ struct User{
 	std::string sshKey;
 	std::string joinDate;
 	std::string lastUseTime;
+	unsigned int unixID;
 	bool superuser;
 	///indicates that the account is used for some type of automation and should
 	///be hidden form other users under typical circumstances
@@ -53,6 +54,7 @@ struct Group{
 	std::string purpose;
 	std::string description;
 	std::string creationDate;
+	unsigned int unixID;
 	///The group is in a requested state but does not yet exist
 	bool pending;
 	

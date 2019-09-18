@@ -182,6 +182,12 @@ bool EmailClient::sendEmail(const Email& email){
 	return true;
 }
 
+const unsigned int PersistentStore::minimumUserID=10000;
+const unsigned int PersistentStore::maximumUserID=1u<<17;
+const unsigned int PersistentStore::minimumGroupID=5000;
+const unsigned int PersistentStore::maximumGroupID=1u<<17;
+const std::string PersistentStore::nextIDKeyName="!_NextUnixID";
+
 PersistentStore::PersistentStore(const Aws::Auth::AWSCredentials& credentials, 
                                  const Aws::Client::ClientConfiguration& clientConfig,
                                  std::string bootstrapUserFile, EmailClient emailClient):
@@ -217,7 +223,7 @@ void PersistentStore::InitializeUserTable(){
 		                       .WithKeyType(KeyType::HASH)})
 		       .WithProjection(Projection()
 		                       .WithProjectionType(ProjectionType::INCLUDE)
-		                       .WithNonKeyAttributes({"unixName","name","email","phone","institution","globusID","sshKey","joinDate","lastUseTime","superuser","serviceAccount"}))
+		                       .WithNonKeyAttributes({"unixName"}))
 		       .WithProvisionedThroughput(ProvisionedThroughput()
 		                                  .WithReadCapacityUnits(1)
 		                                  .WithWriteCapacityUnits(1));
@@ -248,6 +254,18 @@ void PersistentStore::InitializeUserTable(){
 		                                  .WithReadCapacityUnits(1)
 		                                  .WithWriteCapacityUnits(1));
 	};
+	auto getByUnixIDIndex=[](){
+		return GlobalSecondaryIndex()
+		       .WithIndexName("ByUnixID")
+		       .WithKeySchema({KeySchemaElement()
+		                       .WithAttributeName("unixID")
+		                       .WithKeyType(KeyType::HASH)})
+		       .WithProjection(Projection()
+		                       .WithProjectionType(ProjectionType::KEYS_ONLY))
+		       .WithProvisionedThroughput(ProvisionedThroughput()
+		                                  .WithReadCapacityUnits(1)
+		                                  .WithWriteCapacityUnits(1));
+	};
 	
 	//check status of the table
 	auto userTableOut=dbClient.DescribeTable(DescribeTableRequest()
@@ -266,7 +284,8 @@ void PersistentStore::InitializeUserTable(){
 			AttDef().WithAttributeName("sortKey").WithAttributeType(SAT::S),
 			AttDef().WithAttributeName("token").WithAttributeType(SAT::S),
 			AttDef().WithAttributeName("globusID").WithAttributeType(SAT::S),
-			AttDef().WithAttributeName("groupName").WithAttributeType(SAT::S)
+			AttDef().WithAttributeName("groupName").WithAttributeType(SAT::S),
+			AttDef().WithAttributeName("unixID").WithAttributeType(SAT::N)
 		});
 		request.SetKeySchema({
 			KeySchemaElement().WithAttributeName("unixName").WithKeyType(KeyType::HASH),
@@ -278,6 +297,7 @@ void PersistentStore::InitializeUserTable(){
 		request.AddGlobalSecondaryIndexes(getByTokenIndex());
 		request.AddGlobalSecondaryIndexes(getByGlobusIDIndex());
 		request.AddGlobalSecondaryIndexes(getByGroupIndex());
+		request.AddGlobalSecondaryIndexes(getByUnixIDIndex());
 		
 		auto createOut=dbClient.CreateTable(request);
 		if(!createOut.IsSuccess())
@@ -286,6 +306,23 @@ void PersistentStore::InitializeUserTable(){
 		waitTableReadiness(dbClient,userTableName);
 		
 		{
+			//Set the initial unixID
+			{
+				using Aws::DynamoDB::Model::AttributeValue;
+				auto request=Aws::DynamoDB::Model::PutItemRequest()
+				.WithTableName(userTableName)
+				.WithItem({
+					{"unixName",AttributeValue(nextIDKeyName)},
+					{"sortKey",AttributeValue(nextIDKeyName)},
+					{"next_unixID",AttributeValue().SetN(std::to_string(minimumUserID))}
+				});
+				auto outcome=dbClient.PutItem(request);
+				if(!outcome.IsSuccess()){
+					auto err=outcome.GetError();
+					log_fatal("Failed to set initial user ID record: " << err.GetMessage());
+				}
+			}
+			//Insert the root user account
 			try{
 				if(!addUser(rootUser))
 					log_fatal("Failed to inject root user");
@@ -344,6 +381,15 @@ void PersistentStore::InitializeUserTable(){
 			waitIndexReadiness(dbClient,userTableName,"ByGroup");
 			log_info("Added by-Group index to user table");
 		}
+		if(!hasIndex(tableDesc,"ByUnixID")){
+			auto request=updateTableWithNewSecondaryIndex(userTableName,getByUnixIDIndex());
+			request.WithAttributeDefinitions({AttDef().WithAttributeName("unixID").WithAttributeType(SAT::S)});
+			auto createOut=dbClient.UpdateTable(request);
+			if(!createOut.IsSuccess())
+				log_fatal("Failed to add by-UnixID index to user table: " + createOut.GetError().GetMessage());
+			waitIndexReadiness(dbClient,userTableName,"ByUnixID");
+			log_info("Added by-UnixID index to user table");
+		}
 	}
 }
 
@@ -353,6 +399,18 @@ void PersistentStore::InitializeGroupTable(){
 	using SAT=Aws::DynamoDB::Model::ScalarAttributeType;
 	
 	//define indices
+	auto getByUnixIDIndex=[](){
+		return GlobalSecondaryIndex()
+		       .WithIndexName("ByUnixID")
+		       .WithKeySchema({KeySchemaElement()
+		                       .WithAttributeName("unixID")
+		                       .WithKeyType(KeyType::HASH)})
+		       .WithProjection(Projection()
+		                       .WithProjectionType(ProjectionType::KEYS_ONLY))
+		       .WithProvisionedThroughput(ProvisionedThroughput()
+		                                  .WithReadCapacityUnits(1)
+		                                  .WithWriteCapacityUnits(1));
+	};
 	
 	//check status of the table
 	auto groupTableOut=dbClient.DescribeTable(DescribeTableRequest()
@@ -369,6 +427,7 @@ void PersistentStore::InitializeGroupTable(){
 		request.SetAttributeDefinitions({
 			AttDef().WithAttributeName("name").WithAttributeType(SAT::S),
 			AttDef().WithAttributeName("sortKey").WithAttributeType(SAT::S),
+			AttDef().WithAttributeName("unixID").WithAttributeType(SAT::N)
 		});
 		request.SetKeySchema({
 			KeySchemaElement().WithAttributeName("name").WithKeyType(KeyType::HASH),
@@ -377,7 +436,7 @@ void PersistentStore::InitializeGroupTable(){
 		request.SetProvisionedThroughput(ProvisionedThroughput()
 		                                 .WithReadCapacityUnits(1)
 		                                 .WithWriteCapacityUnits(1));
-		//request.AddGlobalSecondaryIndexes(getByNameIndex());
+		request.AddGlobalSecondaryIndexes(getByUnixIDIndex());
 		
 		auto createOut=dbClient.CreateTable(request);
 		if(!createOut.IsSuccess())
@@ -386,6 +445,23 @@ void PersistentStore::InitializeGroupTable(){
 		waitTableReadiness(dbClient,groupTableName);
 		
 		{
+			//Set the initial unixID
+			{
+				using Aws::DynamoDB::Model::AttributeValue;
+				auto request=Aws::DynamoDB::Model::PutItemRequest()
+				.WithTableName(groupTableName)
+				.WithItem({
+					{"name",AttributeValue(nextIDKeyName)},
+					{"sortKey",AttributeValue(nextIDKeyName)},
+					{"next_unixID",AttributeValue().SetN(std::to_string(minimumGroupID))}
+				});
+				auto outcome=dbClient.PutItem(request);
+				if(!outcome.IsSuccess()){
+					auto err=outcome.GetError();
+					log_fatal("Failed to set initial group ID record: " << err.GetMessage());
+				}
+			}
+			//Insert the root group, and make the root user an admin of it
 			try{
 				Group rootGroup;
 				rootGroup.name="root";
@@ -436,6 +512,15 @@ void PersistentStore::InitializeGroupTable(){
 		}
 		
 		//add indices
+		if(!hasIndex(tableDesc,"ByUnixID")){
+			auto request=updateTableWithNewSecondaryIndex(groupTableName,getByUnixIDIndex());
+			request.WithAttributeDefinitions({AttDef().WithAttributeName("unixID").WithAttributeType(SAT::S)});
+			auto createOut=dbClient.UpdateTable(request);
+			if(!createOut.IsSuccess())
+				log_fatal("Failed to add by-UnixID index to group table: " + createOut.GetError().GetMessage());
+			waitIndexReadiness(dbClient,groupTableName,"ByUnixID");
+			log_info("Added by-UnixID index to group table");
+		}
 	}
 }
 
@@ -465,7 +550,88 @@ void PersistentStore::InitializeTables(std::string bootstrapUserFile){
 	InitializeGroupTable();
 }
 
+unsigned int PersistentStore::allocatedUnixID(const std::string& tableName, const std::string& nameKeyName, const unsigned int minID, const unsigned int maxID){
+	auto readNext=[&]()->unsigned int{
+		databaseQueries++;
+		using Aws::DynamoDB::Model::AttributeValue;
+		auto outcome=dbClient.GetItem(Aws::DynamoDB::Model::GetItemRequest()
+									  .WithTableName(tableName)
+									  .WithKey({{nameKeyName,AttributeValue(nextIDKeyName)},
+												{"sortKey",AttributeValue(nextIDKeyName)}}));
+		if(!outcome.IsSuccess()){
+			auto err=outcome.GetError();
+			log_fatal("Failed to fetch unix ID record: " << err.GetMessage());
+		}
+		const auto& item=outcome.GetResult().GetItem();
+		if(item.empty()) //no match found
+			log_fatal(nextIDKeyName + " not found in " + tableName);
+		return std::stoul(findOrThrow(item,"next_unixID","record missing next_unixID attribute").GetN());
+	};
+	auto checkAvailability=[&](unsigned int id)->bool{
+		databaseQueries++;
+		using Aws::DynamoDB::Model::AttributeValue;
+		auto request=Aws::DynamoDB::Model::QueryRequest()
+			.WithTableName(tableName)
+			.WithIndexName("ByUnixID")
+			.WithKeyConditionExpression("#id = :id_val")
+			.WithExpressionAttributeNames({
+				{"#id","unixID"}
+			})
+			.WithExpressionAttributeValues({
+				{":id_val",AttributeValue().SetN(std::to_string(id))}
+			});
+		auto outcome=dbClient.Query(request);
+		if(!outcome.IsSuccess()){
+			auto err=outcome.GetError();
+			log_fatal("Failed to fetch unix ID record: " << err.GetMessage());
+		}
+		const auto& queryResult=outcome.GetResult();
+		return queryResult.GetCount()==0;
+	};
+	auto obtain=[&](unsigned int id, unsigned int next)->bool{
+		using Aws::DynamoDB::Model::AttributeValue;
+		using Aws::DynamoDB::Model::AttributeValueUpdate;
+		auto request=Aws::DynamoDB::Model::UpdateItemRequest()
+		.WithTableName(tableName)
+		.WithKey({{nameKeyName,AttributeValue(nextIDKeyName)},
+	              {"sortKey",AttributeValue(nextIDKeyName)}})
+		.WithUpdateExpression("SET #id = :new_val")
+		.WithConditionExpression("#id = :old_val")
+		.WithExpressionAttributeNames({
+			{"#id","next_unixID"}
+		})
+		.WithExpressionAttributeValues({
+			{":old_val",AttributeValue().SetN(std::to_string(id))},
+			{":new_val",AttributeValue().SetN(std::to_string(next))}
+		});
+		auto outcome=dbClient.UpdateItem(request);
+		if(!outcome.IsSuccess()){
+			auto err=outcome.GetError();
+			log_fatal("Failed to update next unix ID record: " << err.GetMessage());
+		}
+		return true;
+	};
+	
+	unsigned int initialID=readNext();
+	unsigned int tryID=initialID;
+	while(true){
+		unsigned int nextID=tryID+1;
+		if(nextID==maxID)
+			nextID=minID;
+		if(checkAvailability(tryID)){
+			if(obtain(tryID,nextID))
+				return tryID;
+		}
+		
+		tryID=nextID;
+		if(tryID==initialID)
+			log_fatal("Unable to allocate numeric unix ID");
+	}
+}
+
 bool PersistentStore::addUser(const User& user){
+	unsigned int userID=allocatedUnixID(userTableName, "unixName", minimumUserID, maximumUserID);
+
 	using Aws::DynamoDB::Model::AttributeValue;
 	auto request=Aws::DynamoDB::Model::PutItemRequest()
 	.WithTableName(userTableName)
@@ -482,7 +648,8 @@ bool PersistentStore::addUser(const User& user){
 		{"joinDate",AttributeValue(user.joinDate)},
 		{"lastUseTime",AttributeValue(user.lastUseTime)},
 		{"superuser",AttributeValue().SetBool(user.superuser)},
-		{"serviceAccount",AttributeValue().SetBool(user.serviceAccount)}
+		{"serviceAccount",AttributeValue().SetBool(user.serviceAccount)},
+		{"unixID",AttributeValue().SetN(std::to_string(userID))}
 	});
 	auto outcome=dbClient.PutItem(request);
 	if(!outcome.IsSuccess()){
@@ -542,6 +709,7 @@ User PersistentStore::getUser(const std::string& id){
 	user.lastUseTime=findOrThrow(item,"lastUseTime","user record missing lastUseTime attribute").GetS();
 	user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
 	user.serviceAccount=findOrThrow(item,"serviceAccount","user record missing serviceAccount attribute").GetBool();
+	user.unixID=std::stoul(findOrThrow(item,"unixID","user record missing unixID attribute (getUser)").GetN());
 	
 	//update caches
 	CacheRecord<User> record(user,userCacheValidity);
@@ -590,28 +758,7 @@ User PersistentStore::findUserByToken(const std::string& token){
 		log_fatal("Multiple user records are associated with token " << token << '!');
 	
 	const auto& item=queryResult.GetItems().front();
-	User user;
-	user.valid=true;
-	user.token=token;
-	user.unixName=findOrThrow(item,"unixName","user record missing unixName attribute").GetS();
-	user.name=findOrThrow(item,"name","user record missing name attribute").GetS();
-	user.email=findOrThrow(item,"email","user record missing email attribute").GetS();
-	user.phone=findOrDefault(item,"phone",missingString).GetS();
-	user.institution=findOrDefault(item,"institution",missingString).GetS();
-	user.globusID=findOrThrow(item,"globusID","user record missing globusID attribute").GetS();
-	user.sshKey=findOrThrow(item,"sshKey","user record missing sshKey attribute").GetS();
-	user.joinDate=findOrThrow(item,"joinDate","user record missing joinDate attribute").GetS();
-	user.lastUseTime=findOrThrow(item,"lastUseTime","user record missing lastUseTime attribute").GetS();
-	user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
-	user.serviceAccount=findOrThrow(item,"serviceAccount","user record missing serviceAccount attribute").GetBool();
-	
-	//update caches
-	CacheRecord<User> record(user,userCacheValidity);
-	replaceCacheRecord(userCache,user.unixName,record);
-	replaceCacheRecord(userByTokenCache,user.token,record);
-	replaceCacheRecord(userByGlobusIDCache,user.globusID,record);
-	
-	return user;
+	return getUser(findOrThrow(item,"unixName","user record missing unixName attribute").GetS());
 }
 
 User PersistentStore::findUserByGlobusID(const std::string& globusID){
@@ -796,8 +943,8 @@ std::vector<User> PersistentStore::listUsers(){
 	Aws::DynamoDB::Model::ScanRequest request;
 	request.SetTableName(userTableName);
 	//Ignore group membership records
-	request.SetFilterExpression("attribute_not_exists(#groupName) and attribute_not_exists(#secondAttr)");
-	request.SetExpressionAttributeNames({{"#groupName", "groupName"},{"#secondAttr", "secondaryAttribute"}});
+	request.SetFilterExpression("attribute_not_exists(#groupName) and attribute_not_exists(#secondAttr) and attribute_not_exists(#nextID)");
+	request.SetExpressionAttributeNames({{"#groupName", "groupName"},{"#secondAttr", "secondaryAttribute"},{"#nextID", "next_unixID"}});
 	bool keepGoing=false;
 	
 	do{
@@ -820,6 +967,8 @@ std::vector<User> PersistentStore::listUsers(){
 		for(const auto& item : result.GetItems()){
 			User user;
 			user.valid=true;
+			if(item.count("next_unixID"))
+				log_fatal("Dynamo is stupid");
 			user.unixName=findOrThrow(item,"unixName","user record missing unixName attribute").GetS();
 			user.name=findOrThrow(item,"name","user record missing name attribute").GetS();
 			user.email=findOrThrow(item,"email","user record missing email attribute").GetS();
@@ -832,6 +981,7 @@ std::vector<User> PersistentStore::listUsers(){
 			user.lastUseTime=findOrThrow(item,"lastUseTime","user record missing lastUseTime attribute").GetS();
 			user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
 			user.serviceAccount=findOrThrow(item,"serviceAccount","user record missing serviceAccount attribute").GetBool();
+			user.unixID=std::stoul(findOrThrow(item,"unixID","user record missing unixID attribute (listUsers)").GetN());
 			collected.push_back(user);
 
 			CacheRecord<User> record(user,userCacheValidity);
@@ -1143,6 +1293,9 @@ bool PersistentStore::addGroup(const Group& group){
 		throw std::runtime_error("Group purpose must not be empty because Dynamo");
 	if(group.description.empty())
 		throw std::runtime_error("Group description must not be empty because Dynamo");
+	
+	unsigned int groupID=allocatedUnixID(groupTableName, "name", minimumGroupID, maximumGroupID);
+		
 	using AV=Aws::DynamoDB::Model::AttributeValue;
 	auto outcome=dbClient.PutItem(Aws::DynamoDB::Model::PutItemRequest()
 	                              .WithTableName(groupTableName)
@@ -1153,7 +1306,8 @@ bool PersistentStore::addGroup(const Group& group){
 	                                         {"phone",AV(group.phone)},
 	                                         {"purpose",AV(group.purpose)},
 	                                         {"description",AV(group.description)},
-	                                         {"creationDate",AV(group.creationDate)}
+	                                         {"creationDate",AV(group.creationDate)},
+	                                         {"unixID",AV().SetN(std::to_string(groupID))}
 	                              }));
 	if(!outcome.IsSuccess()){
 		auto err=outcome.GetError();
@@ -1376,8 +1530,8 @@ std::vector<Group> PersistentStore::listGroups(){
 	databaseScans++;
 	Aws::DynamoDB::Model::ScanRequest request;
 	request.SetTableName(groupTableName);
-	request.SetFilterExpression("attribute_not_exists(#requester) and attribute_not_exists(#secondAttr)");
-	request.SetExpressionAttributeNames({{"#requester", "requester"},{"#secondAttr", "secondaryAttribute"}});
+	request.SetFilterExpression("attribute_not_exists(#requester) and attribute_not_exists(#secondAttr) and attribute_not_exists(#nextID)");
+	request.SetExpressionAttributeNames({{"#requester", "requester"},{"#secondAttr", "secondaryAttribute"},{"#nextID", "next_unixID"}});
 	bool keepGoing=false;
 	
 	do{
@@ -1407,6 +1561,7 @@ std::vector<Group> PersistentStore::listGroups(){
 			group.purpose=findOrThrow(item,"purpose","Group record missing purpose attribute").GetS();
 			group.description=findOrThrow(item,"description","Group record missing description attribute").GetS();
 			group.creationDate=findOrThrow(item,"creationDate","Group record missing creation date attribute").GetS();
+			group.unixID=std::stoul(findOrThrow(item,"unixID","Group record missing unixID attribute").GetN());
 			collected.push_back(group);
 
 			CacheRecord<Group> record(group,groupCacheValidity);
@@ -1513,10 +1668,12 @@ Group PersistentStore::getGroup(const std::string& groupName){
 	group.phone=findOrThrow(item,"phone","Group record missing phone attribute").GetS();
 	group.purpose=findOrThrow(item,"purpose","Group record missing purpose attribute").GetS();
 	group.description=findOrThrow(item,"description","Group record missing description attribute").GetS();
-	if(item.count("requester"))
+	if(item.count("requester")) //if a requestor is recorded this group is still in a requested state
 		group.pending=true;
-	else
+	else{ //only fully created groups have these properties
 		group.creationDate=findOrThrow(item,"creationDate","Group record missing creation date attribute").GetS();
+		group.unixID=std::stoul(findOrThrow(item,"unixID","Group record missing unixID attribute").GetN());
+	}
 	
 	//update caches
 	CacheRecord<Group> record(group,groupCacheValidity);
@@ -1585,6 +1742,8 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 		return false;
 	}
 	
+	unsigned int groupID=allocatedUnixID(groupTableName, "name", minimumGroupID, maximumGroupID);
+	
 	std::string creationDate=timestamp();
 	using AV=Aws::DynamoDB::Model::AttributeValue;
 	using AVU=Aws::DynamoDB::Model::AttributeValueUpdate;
@@ -1596,6 +1755,7 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 	                                            {"requester",AVU().WithAction(Aws::DynamoDB::Model::AttributeAction::DELETE_)},
 	                                            {"secondaryAttributes",AVU().WithAction(Aws::DynamoDB::Model::AttributeAction::DELETE_)},
 	                                            {"creationDate",AVU().WithValue(AV(creationDate))},
+	                                            {"unixID",AVU().WithValue(AV().SetN(std::to_string(groupID)))}
 	                                            })
 	                                 );
 	if(!outcome.IsSuccess()){

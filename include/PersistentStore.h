@@ -294,6 +294,10 @@ private:
 	///Name of the groups table in the database
 	const std::string groupTableName;
 	
+	const static unsigned int minimumUserID, maximumUserID;
+	const static unsigned int minimumGroupID, maximumGroupID;
+	const static std::string nextIDKeyName;
+	
 	User rootUser;
 	
 	EmailClient emailClient;
@@ -339,6 +343,8 @@ private:
 	std::string encodeGroupName(std::string name);
 	///Turn a group name suitable for dynamo back to normal
 	std::string decodeGroupName(std::string name);
+	
+	unsigned int allocatedUnixID(const std::string& tableName, const std::string& nameKeyName, const unsigned int minID, const unsigned int maxID);
 	
 	std::atomic<size_t> cacheHits, databaseQueries, databaseScans;
 };

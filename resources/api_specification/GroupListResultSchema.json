@@ -33,9 +33,12 @@
           },
           "creation_date": {
             "type": "string"
+          },
+          "unix_id": {
+            "type": "number"
           }
         },
-        "required": ["name","display_name","purpose","email","phone","description","creation_date"]
+        "required": ["name","display_name","purpose","email","phone","description","creation_date","unix_id"]
       }
     }
   },

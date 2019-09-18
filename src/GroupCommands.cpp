@@ -150,6 +150,7 @@ crow::response listGroups(PersistentStore& store, const crow::request& req){
 		groupResult.AddMember("purpose", group.purpose, alloc);
 		groupResult.AddMember("description", group.description, alloc);
 		groupResult.AddMember("creation_date", group.creationDate, alloc);
+		groupResult.AddMember("unix_id", group.unixID, alloc);
 		resultItems.PushBack(groupResult, alloc);
 	}
 	result.AddMember("groups", resultItems, alloc);
@@ -379,6 +380,7 @@ crow::response getGroupInfo(PersistentStore& store, const crow::request& req, st
 	metadata.AddMember("purpose", group.purpose, alloc);
 	metadata.AddMember("description", group.description, alloc);
 	metadata.AddMember("creation_date", group.creationDate, alloc);
+	metadata.AddMember("unix_id", group.unixID, alloc);
 	result.AddMember("kind", "Group", alloc);
 	result.AddMember("metadata", metadata, alloc);
 	

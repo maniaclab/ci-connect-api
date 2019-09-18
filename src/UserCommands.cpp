@@ -29,6 +29,7 @@ crow::response listUsers(PersistentStore& store, const crow::request& req){
 		userData.AddMember("phone", rapidjson::StringRef(user.phone.c_str()), alloc);
 		userData.AddMember("institution", rapidjson::StringRef(user.institution.c_str()), alloc);
 		userData.AddMember("unix_name", user.unixName, alloc);
+		userData.AddMember("unix_id", user.unixID, alloc);
 		userData.AddMember("join_date", user.joinDate, alloc);
 		userData.AddMember("last_use_time", user.lastUseTime, alloc);
 		userResult.AddMember("metadata", userData, alloc);
@@ -395,6 +396,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	metadata.AddMember("join_date", targetUser.joinDate, alloc);
 	metadata.AddMember("last_use_time", targetUser.lastUseTime, alloc);
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
+	metadata.AddMember("unix_id", targetUser.unixID, alloc);
 	metadata.AddMember("superuser", targetUser.superuser, alloc);
 	metadata.AddMember("service_account", targetUser.serviceAccount, alloc);
 	rapidjson::Value groupMemberships(rapidjson::kArrayType);
@@ -439,6 +441,7 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 	metadata.AddMember("access_token", targetUser.token, alloc);
 	metadata.AddMember("public_key", targetUser.sshKey, alloc);
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
+	metadata.AddMember("unix_id", targetUser.unixID, alloc);
 	metadata.AddMember("join_date", targetUser.joinDate, alloc);
 	metadata.AddMember("last_use_time", targetUser.lastUseTime, alloc);
 	metadata.AddMember("superuser", targetUser.superuser, alloc);

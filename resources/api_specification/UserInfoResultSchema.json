@@ -36,6 +36,9 @@
         "unix_name": {
           "type": "string"
         },
+        "unix_id": {
+          "type": "number"
+        },
         "superuser": {
           "type": "boolean"
         },
@@ -65,7 +68,7 @@
           }
         }
       },
-      "required": ["id","name","email","phone","institution","access_token","superuser","service_account","groups"]
+      "required": ["id","name","email","phone","institution","access_token","public_key","unix_name","unix_id","superuser","service_account","join_date","group_memberships"]
     }
   },
   "required": ["apiVersion","kind","metadata"]
