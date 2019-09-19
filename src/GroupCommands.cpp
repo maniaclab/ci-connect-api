@@ -591,6 +591,7 @@ crow::response getSubgroups(PersistentStore& store, const crow::request& req, st
 		groupResult.AddMember("phone", group.phone, alloc);
 		groupResult.AddMember("purpose", group.purpose, alloc);
 		groupResult.AddMember("description", group.description, alloc);
+		groupResult.AddMember("unix_id", group.unixID, alloc);
 		resultItems.PushBack(groupResult, alloc);
 	}
 	result.AddMember("groups", resultItems, alloc);
