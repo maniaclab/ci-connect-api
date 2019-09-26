@@ -18,6 +18,10 @@ HELP="Usage: sync_users.sh [OPTION]...
     -u group, --user-group group
         Use group as the user source group, the group from which users are 
         selected to be provisioned
+    --wipe
+        Remove all users and groups previously provisioned. This operation will
+        permanently destroy any data in users' home directories which has not 
+        been copied elsewhere. 
 "
 
 # Read command line arguments
@@ -64,12 +68,37 @@ do
 		fi
 		HOME_DIR_ROOT="$1"
 		shift
+	elif [ "$arg" = "--wipe" ]; then
+		DO_WIPE=1
 	else
 		echo "Error: Unexpected argument: $arg" 1>&2
 		exit 1
 	fi
-	
 done
+
+if [ "$DO_WIPE" ]; then
+	echo "Warning: Erasing all provisioned users and groups in 5 seconds"
+	sleep 5
+	# erase users
+	if [ -f existing_users ]; then
+		for DEFUNCT_USER in $(cat existing_users); do
+			echo "Deleting user $DEFUNCT_USER"
+			userdel -r "$DEFUNCT_USER"
+			sed '/^'"$DEFUNCT_USER"'$/d' existing_users > existing_users.new
+			mv existing_users.new existing_users
+		done
+	fi
+	# erase groups
+	if [ -f existing_groups ]; then
+		for DEFUNCT_GROUP in $(cat existing_groups); do
+			echo "Deleting group $DEFUNCT_GROUP"
+			groupdel "$DEFUNCT_GROUP"
+			sed '/^'"$DEFUNCT_GROUP"'$/d' existing_groups > existing_groups.new
+			mv existing_groups.new existing_groups
+		done
+	fi
+	exit
+fi
 
 # Check that necessary variables are set
 if [ -z "$API_TOKEN" ]; then
@@ -149,9 +178,17 @@ while [ "$PROCESSED" -lt "$N_ACTIVE" ]; do
 	echo "Fetched $PROCESSED users"
 done
 
+# Figure out the last component of the base group name, e.g. root.foo -> foo
+BASE_GROUP_NAME=$(echo "$GROUP_ROOT_GROUP" | sed 's/.*\.\([^.]*\)$/\1/')
+# Figure out what, if anything, contains the base group, e.g. root.foo.bar -> root.foo
+BASE_GROUP_CONTEXT=$(echo "$GROUP_ROOT_GROUP" | sed -n 's/^\(.*\)\.[^.]*$/\1/p')
+if [ "$BASE_GROUP_CONTEXT" ]; then
+	# demand an explicit dot after a non-empty base
+	BASE_GROUP_CONTEXT="$BASE_GROUP_CONTEXT."
+fi
 # Get all subgroups
 curl -s ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}/subgroups?token=${API_TOKEN} > subgroups.json
-SUBGROUPS=$(jq '.groups | map(.name)' subgroups.json | sed -n 's|.*"'"$GROUP_ROOT_GROUP"'\.\([^"]*\)".*|\1|p')
+SUBGROUPS=$(jq '.groups | map(.name)' subgroups.json | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p')
 
 # Delete all existing users which should not exist
 echo "$ACTIVE_USERS
@@ -167,7 +204,7 @@ rm all_users
 # Delete all existing groups which should not exist
 # Do this after deleting users in case any of the groups we need to delete was 
 # the primary group of a user which was deleted. 
-for DEFUNCT_GROUP in $(echo "$SUBGROUPS" | join -v1 existing_groups -); do
+for DEFUNCT_GROUP in $(printf "%s\n%s" "$BASE_GROUP_NAME" "$SUBGROUPS" | sort | join -v1 existing_groups -); do
 	echo "Deleting group $DEFUNCT_GROUP"
 	groupdel "$DEFUNCT_GROUP"
 	sed '/^'"$DEFUNCT_GROUP"'$/d' existing_groups > existing_groups.new
@@ -175,16 +212,25 @@ for DEFUNCT_GROUP in $(echo "$SUBGROUPS" | join -v1 existing_groups -); do
 done
 
 # Create groups which are needed and don't yet exist
+if grep -q "^${BASE_GROUP_NAME}:" /etc/group; then
+	echo "Group $BASE_GROUP_NAME already exists"
+else
+	echo "Creating group $BASE_GROUP_NAME"
+	GID=$(curl "${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}?token=${API_TOKEN}" | jq -r '.metadata.unix_id')
+	groupadd "$BASE_GROUP_NAME" -g $GID
+fi
 for GROUP in $SUBGROUPS; do
 	if grep -q "^${GROUP}:" /etc/group; then
 		echo "Group $GROUP already exists"
 	else
 		echo "Creating group $GROUP"
-		GID=$(jq -r '.groups | map(select(.name==("'"${GROUP_ROOT_GROUP}.${GROUP}"'"))) | map(.unix_id)[0]' subgroups.json)
-		echo "group data:"; jq -r '.groups | map(select(.name==("'"${GROUP_ROOT_GROUP}.${GROUP}"'")))' subgroups.json
+		GID=$(jq -r '.groups | map(select(.name==("'"${BASE_GROUP_CONTEXT}${GROUP}"'"))) | map(.unix_id)[0]' subgroups.json)
+		# echo "group data:"; jq -r '.groups | map(select(.name==("'"${GROUP_ROOT_GROUP}.${GROUP}"'")))' subgroups.json
 		groupadd "$GROUP" -g $GID
 	fi
 done
+printf "%s\n%s" "$BASE_GROUP_NAME" "$SUBGROUPS" | cat existing_groups - | sort | uniq > existing_groups.new
+mv existing_groups.new existing_groups
 
 USERS_TO_CREATE=$(echo "$ACTIVE_USERS" | join -v2 existing_users -)
 USERS_TO_UPDATE=$(echo "$ACTIVE_USERS" | join existing_users -)
@@ -229,8 +275,8 @@ for USER in $USERS_TO_CREATE; do
 	USER_ID=$(echo "$USER_DATA" | jq -r '.unix_id')
 	USER_NAME=$(echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(echo "$USER_DATA" | jq -r '.email')
-	USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$GROUP_ROOT_GROUP"'\.\([^"]*\)".*|\1|p' | tr '\n' ',' | sed 's|,$||')
-	useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}/" -G "$USER_GROUPS" "$USER"
+	USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | tr '\n' ',' | sed 's|,$||')
+	useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 	set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(echo "$USER_DATA" | jq -r '.public_key')"
 	DEFAULT_GROUP=$(echo "$USER_GROUPS" | sed 's|,.*$||')
 	set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
@@ -250,7 +296,7 @@ for USER in $USERS_TO_UPDATE; do
 	echo "Updating user $USER"
 	USER_NAME=$(echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(echo "$USER_DATA" | jq -r '.email')
-	USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$GROUP_ROOT_GROUP"'\.\([^"]*\)".*|\1|p' | tr '\n' ',' | sed 's|,$||')
+	USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | tr '\n' ',' | sed 's|,$||')
 	usermod -G "$USER_GROUPS" "$USER"
 	set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(echo "$USER_DATA" | jq -r '.public_key')"
 	DEFAULT_GROUP=$(echo "$USER_GROUPS" | sed 's|,.*$||')
