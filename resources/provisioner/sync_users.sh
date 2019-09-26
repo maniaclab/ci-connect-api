@@ -227,6 +227,10 @@ for GROUP in $SUBGROUPS; do
 		GID=$(jq -r '.groups | map(select(.name==("'"${BASE_GROUP_CONTEXT}${GROUP}"'"))) | map(.unix_id)[0]' subgroups.json)
 		# echo "group data:"; jq -r '.groups | map(select(.name==("'"${GROUP_ROOT_GROUP}.${GROUP}"'")))' subgroups.json
 		groupadd "$GROUP" -g $GID
+		if [ "$?" -ne 0 ]; then
+			echo "Aborting due to group creation error" 1>&2
+			exit 1
+		fi
 	fi
 done
 printf "%s\n%s" "$BASE_GROUP_NAME" "$SUBGROUPS" | cat existing_groups - | sort | uniq > existing_groups.new
@@ -275,7 +279,7 @@ for USER in $USERS_TO_CREATE; do
 	USER_ID=$(echo "$USER_DATA" | jq -r '.unix_id')
 	USER_NAME=$(echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(echo "$USER_DATA" | jq -r '.email')
-	USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | tr '\n' ',' | sed 's|,$||')
+	USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^osg\(\..*\)*/p' | tr '\n' ',' | sed 's|,$||')
 	useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 	set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(echo "$USER_DATA" | jq -r '.public_key')"
 	DEFAULT_GROUP=$(echo "$USER_GROUPS" | sed 's|,.*$||')
@@ -296,7 +300,7 @@ for USER in $USERS_TO_UPDATE; do
 	echo "Updating user $USER"
 	USER_NAME=$(echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(echo "$USER_DATA" | jq -r '.email')
-	USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | tr '\n' ',' | sed 's|,$||')
+	USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^osg\(\..*\)*/p' | tr '\n' ',' | sed 's|,$||')
 	usermod -G "$USER_GROUPS" "$USER"
 	set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(echo "$USER_DATA" | jq -r '.public_key')"
 	DEFAULT_GROUP=$(echo "$USER_GROUPS" | sed 's|,.*$||')
