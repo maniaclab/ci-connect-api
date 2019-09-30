@@ -392,16 +392,20 @@ crow::response updateGroup(PersistentStore& store, const crow::request& req, std
 	log_info(user << " requested to update " << groupName);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
+	
+	Group targetGroup = store.getGroup(groupName);
+	if(targetGroup.pending){
+		log_info("Target group is in a pending state, treating as a group request update");
+		return updateGroupRequest(store, req, groupName);
+	}
+	
+	if(!targetGroup)
+		return crow::response(404,generateError("Group not found"));
 		
 	groupName=canonicalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
 	if(!user.superuser && store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin)
 		return crow::response(403,generateError("Not authorized"));
-	
-	Group targetGroup = store.getGroup(groupName);
-	
-	if(!targetGroup)
-		return crow::response(404,generateError("Group not found"));
 	
 	//unpack the new Group info
 	rapidjson::Document body;
@@ -462,6 +466,123 @@ crow::response updateGroup(PersistentStore& store, const crow::request& req, std
 	if(!success){
 		log_error("Failed to update " << targetGroup);
 		return crow::response(500,generateError("Group update failed"));
+	}
+	
+	return(crow::response(200));
+}
+
+crow::response updateGroupRequest(PersistentStore& store, const crow::request& req, std::string groupName){
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+	
+	groupName=canonicalizeGroupName(groupName);
+	
+	GroupRequest targetRequest = store.getGroupRequest(groupName);
+	if(!targetRequest)
+		return crow::response(404,generateError("Group request not found"));
+	
+	//There are no members of a group request; the relevant authorities are the 
+	//enclosing group admins and the requester. 
+	std::string enclosingGroupName=enclosingGroup(groupName);
+	if(!user.superuser && 
+	  store.userStatusInGroup(user.unixName,enclosingGroupName).state!=GroupMembership::Admin
+	  && user.unixName!=targetRequest.requester)
+		return crow::response(403,generateError("Not authorized"));
+	
+	//unpack the new info
+	rapidjson::Document body;
+	try{
+		body.Parse(req.body.c_str());
+	}catch(std::runtime_error& err){
+		return crow::response(400,generateError("Invalid JSON in request body"));
+	}
+	if(body.IsNull())
+		return crow::response(400,generateError("Invalid JSON in request body"));
+	if(!body.HasMember("metadata"))
+		return crow::response(400,generateError("Missing Group metadata in request"));
+	if(!body["metadata"].IsObject())
+		return crow::response(400,generateError("Incorrect type for metadata"));
+		
+	bool doUpdate=false;
+	bool nameChange=false;
+	
+	if(body["metadata"].HasMember("name")){
+		if(!body["metadata"]["name"].IsString())
+			return crow::response(400,generateError("Incorrect type for name"));
+		//Changing the requested group name is a bit tricky. 
+		//We need to make sure that it is fully qualified and doesn't collide with anything else
+		std::string requestedName=body["metadata"]["name"].GetString();
+		//first ensure that the name is fully qualified
+		requestedName=canonicalizeGroupName(requestedName, enclosingGroupName);
+		//then check for collisions
+		Group otherGroup=store.getGroup(requestedName);
+		if(otherGroup.valid)
+			return crow::response(400,generateError("A group named "+requestedName+" already exists"));
+		//TODO: it would be problematic if the requested name attempts to move 
+		//the request somewhere else in the group hierarchy
+		targetRequest.name=requestedName;
+		doUpdate=true;
+		nameChange=true;
+	}
+	if(body["metadata"].HasMember("display_name")){
+		if(!body["metadata"]["display_name"].IsString())
+			return crow::response(400,generateError("Incorrect type for display name"));
+		targetRequest.displayName=body["metadata"]["display_name"].GetString();
+		doUpdate=true;
+	}
+	if(body["metadata"].HasMember("email")){
+		if(!body["metadata"]["email"].IsString())
+			return crow::response(400,generateError("Incorrect type for email"));
+		targetRequest.email=body["metadata"]["email"].GetString();
+		doUpdate=true;
+	}
+	if(body["metadata"].HasMember("phone")){
+		if(!body["metadata"]["phone"].IsString())
+			return crow::response(400,generateError("Incorrect type for phone"));
+		targetRequest.phone=body["metadata"]["phone"].GetString();
+		doUpdate=true;
+	}
+	if(body["metadata"].HasMember("purpose")){
+		if(!body["metadata"]["purpose"].IsString())
+			return crow::response(400,generateError("Incorrect type for purpose"));
+		targetRequest.purpose=normalizeScienceField(body["metadata"]["purpose"].GetString());
+		if(targetRequest.purpose.empty())
+			return crow::response(400,generateError("Unrecognized value for Group purpose"));
+		doUpdate=true;
+	}
+	if(body["metadata"].HasMember("description")){
+		if(!body["metadata"]["description"].IsString())
+			return crow::response(400,generateError("Incorrect type for description"));
+		targetRequest.description=body["metadata"]["description"].GetString();
+		doUpdate=true;
+	}
+	
+	if(!doUpdate){
+		log_info("Requested update to " << targetRequest << " is trivial");
+		return(crow::response(200));
+	}
+	
+	log_info("Updating " << targetRequest);
+	bool success=false;
+	if(nameChange){
+		success=store.addGroupRequest(targetRequest); //first create new record
+		if(!success){
+			log_error("Failed to create " << targetRequest << " under new name");
+			return crow::response(500,generateError("Group request update failed"));
+		}
+		success=store.removeGroup(groupName); //then remove the old record
+		if(!success){
+			log_error("Failed to remove old " << targetRequest << " record ("+groupName+")");
+			return crow::response(500,generateError("Group request update failed"));
+		}
+	}
+	else
+		success=store.updateGroup(Group(targetRequest,timestamp()));
+	
+	if(!success){
+		log_error("Failed to update " << targetRequest);
+		return crow::response(500,generateError("Group request update failed"));
 	}
 	
 	return(crow::response(200));

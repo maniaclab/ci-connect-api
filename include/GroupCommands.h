@@ -16,6 +16,7 @@ crow::response getGroupInfo(PersistentStore& store, const crow::request& req, st
 ///Change a Group's information
 ///\param groupID the Group to update
 crow::response updateGroup(PersistentStore& store, const crow::request& req, std::string groupName);
+crow::response updateGroupRequest(PersistentStore& store, const crow::request& req, std::string groupName);
 ///Delete a group
 ///\param groupID the Group to destroy
 crow::response deleteGroup(PersistentStore& store, const crow::request& req, std::string groupName);

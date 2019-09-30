@@ -1394,8 +1394,9 @@ bool PersistentStore::removeGroup(const std::string& groupName){
 	databaseScans++;
 	Aws::DynamoDB::Model::ScanRequest request;
 	request.SetTableName(groupTableName);
-	request.SetFilterExpression("attribute_exists(#extra) AND #name = "+groupName);
+	request.SetFilterExpression("attribute_exists(#extra) AND #name = :name");
 	request.SetExpressionAttributeNames({{"#extra", "secondaryAttribute"},{"#name", "name"}});
+	request.SetExpressionAttributeValues({{":name",AttributeValue(groupName)}});
 	bool keepGoing=false;
 	
 	std::vector<std::string> toDelete;
