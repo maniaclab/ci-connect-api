@@ -842,6 +842,17 @@ crow::response denySubgroupRequest(PersistentStore& store, const crow::request& 
 	GroupRequest newGroupRequest = store.getGroupRequest(newGroupName);
 	if(!newGroupRequest)
 		return crow::response(404,generateError("Group request not found"));
+		
+	rapidjson::Document body;
+	try{
+		if(!req.body.empty())
+			body.Parse(req.body.c_str());
+	}catch(std::runtime_error& err){
+		return crow::response(400,generateError("Invalid JSON in request body"));
+	}
+	std::string message;
+	if(body.IsObject() && body.HasMember("message") && body["message"].IsString())
+		message=body["message"].GetString();
 	
 	bool success = store.removeGroup(newGroupName);
 	
@@ -851,14 +862,16 @@ crow::response denySubgroupRequest(PersistentStore& store, const crow::request& 
 	//inform the person who made the request
 	User requestingUser=store.getUser(newGroupRequest.requester);
 	if(requestingUser){
-		EmailClient::Email message;
-		message.fromAddress="no-reply@ci-connect.net";
-		message.toAddresses={requestingUser.email};
-		message.subject="CI-Connect group creation request denied";
-		message.body="This is an automatic notification that your request to create the group, "+
+		EmailClient::Email mail;
+		mail.fromAddress="no-reply@ci-connect.net";
+		mail.toAddresses={requestingUser.email};
+		mail.subject="CI-Connect group creation request denied";
+		mail.body="This is an automatic notification that your request to create the group, "+
 		newGroupRequest.displayName+" ("+newGroupRequest.name+
 		") has been denied by the enclosing group administrators.";
-		store.getEmailClient().sendEmail(message);
+		if(!message.empty())
+			mail.body+="\n\nThe following reason was given: \""+message+"\"";
+		store.getEmailClient().sendEmail(mail);
 	}
 	
 	return(crow::response(200));

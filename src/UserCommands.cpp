@@ -824,6 +824,17 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 	   adminInAnyEnclosingGroup(store,user.unixName,groupID).empty())
 		return crow::response(403,generateError("Not authorized"));
 	
+	rapidjson::Document body;
+	try{
+		if(!req.body.empty())
+			body.Parse(req.body.c_str());
+	}catch(std::runtime_error& err){
+		return crow::response(400,generateError("Invalid JSON in request body"));
+	}
+	std::string message;
+	if(body.IsObject() && body.HasMember("message") && body["message"].IsString())
+		message=body["message"].GetString();
+	
 	auto currentStatus=store.userStatusInGroup(targetUser.unixName,groupID);
 	
 	log_info("Removing " << targetUser << " from " << groupID);
@@ -846,22 +857,26 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 		return crow::response(500,generateError("User removal from Group failed"));
 		
 	if(currentStatus.state==GroupMembership::Pending){
-		EmailClient::Email message;
-		message.fromAddress="no-reply@ci-connect.net";
-		message.toAddresses={targetUser.email};
-		message.subject="CI-Connect group membership request denied";
-		message.body="This is an automatic notification that your request to join the "+
+		EmailClient::Email mail;
+		mail.fromAddress="no-reply@ci-connect.net";
+		mail.toAddresses={targetUser.email};
+		mail.subject="CI-Connect group membership request denied";
+		mail.body="This is an automatic notification that your request to join the "+
 		groupID+" group has been denied by the group administrators.";
-		store.getEmailClient().sendEmail(message);
+		if(!message.empty())
+			mail.body+="\n\nThe following reason was given: \""+message+"\"";
+		store.getEmailClient().sendEmail(mail);
 	}
 	else{
-		EmailClient::Email message;
-		message.fromAddress="no-reply@ci-connect.net";
-		message.toAddresses={targetUser.email};
-		message.subject="CI-Connect group membership change";
-		message.body="This is an automatic notification that your account has been removed from the "+
+		EmailClient::Email mail;
+		mail.fromAddress="no-reply@ci-connect.net";
+		mail.toAddresses={targetUser.email};
+		mail.subject="CI-Connect group membership change";
+		mail.body="This is an automatic notification that your account has been removed from the "+
 		groupID+" group.";
-		store.getEmailClient().sendEmail(message);
+		if(!message.empty())
+			mail.body+="\n\nThe following reason was given: \""+message+"\"";
+		store.getEmailClient().sendEmail(mail);
 	}
 	
 	return(crow::response(200));

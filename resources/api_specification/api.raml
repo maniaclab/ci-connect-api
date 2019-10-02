@@ -622,6 +622,9 @@ version: v1alpha1
               type: string
               description: User's authentication token
               required: true
+          body:
+            application/json:
+              type: !include UserJoinRequestDenialSchema.json
           responses:
             200:
               description: Success
@@ -743,6 +746,9 @@ version: v1alpha1
               type: string
               description: User's authentication token
               required: true
+          body:
+            application/json:
+              type: !include GroupRequestDenialSchema.json
           responses:
             200:
               description: Success
