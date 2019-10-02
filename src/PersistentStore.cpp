@@ -1227,7 +1227,6 @@ bool PersistentStore::unixNameInUse(const std::string& name){
 
 std::vector<GroupMembership> PersistentStore::getUserGroupMemberships(const std::string& uID){
 	//first check if list of memberships is cached
-	CacheRecord<std::string> record;
 	auto cached = groupMembershipByUserCache.find(uID);
 	if (cached.second > std::chrono::steady_clock::now()) {
 		auto records = cached.first;
@@ -1278,6 +1277,9 @@ std::vector<GroupMembership> PersistentStore::getUserGroupMemberships(const std:
 			groupMembershipByGroupCache.insert_or_assign(membership.groupName,record);
 		}
 	}
+	
+	auto expirationTime = std::chrono::steady_clock::now() + userCacheValidity;
+	groupMembershipByUserCache.update_expiration(uID, expirationTime);
 	
 	return memberships;
 }
@@ -1510,6 +1512,9 @@ std::vector<GroupMembership> PersistentStore::getMembersOfGroup(const std::strin
 		groupMembershipByUserCache.insert_or_assign(membership.userName,record);
 		groupMembershipByGroupCache.insert_or_assign(groupName,record);
 	}
+	
+	auto expirationTime = std::chrono::steady_clock::now() + groupCacheValidity;
+	groupMembershipByGroupCache.update_expiration(groupName, expirationTime);
 	
 	return memberships;
 }
