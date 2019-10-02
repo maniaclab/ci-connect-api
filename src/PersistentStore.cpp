@@ -1083,7 +1083,7 @@ GroupMembership PersistentStore::userStatusInGroup(const std::string& uID, std::
 	const auto& item=outcome.GetResult().GetItem();
 	GroupMembership membership;
 	if(item.empty()){ //no match found, make non-member record
-		membership.valid=false;
+		membership.valid=true;
 		membership.userName=uID;
 		membership.groupName=groupName;
 		membership.state=GroupMembership::NonMember;
