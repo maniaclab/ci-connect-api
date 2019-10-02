@@ -43,6 +43,10 @@ version: v1alpha1
           type: string
           description: User's authentication token
           required: true
+        omit_groups:
+          displayName: Omit group info
+          description: Suppress fetching information about the user's group memberships
+          required: false
       responses:
         200:
           description: Normal success

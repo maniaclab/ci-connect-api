@@ -427,6 +427,8 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 	User targetUser=store.getUser(uID);
 	if(!targetUser)
 		return crow::response(404,generateError("Not found"));
+		
+	bool omitGroups=req.url_params.get("omit_groups")!=nullptr;
 
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
@@ -446,16 +448,18 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 	metadata.AddMember("last_use_time", targetUser.lastUseTime, alloc);
 	metadata.AddMember("superuser", targetUser.superuser, alloc);
 	metadata.AddMember("service_account", targetUser.serviceAccount, alloc);
-	rapidjson::Value groupMemberships(rapidjson::kArrayType);
-	std::vector<GroupMembership> groupMembershipList = store.getUserGroupMemberships(uID);
-	for (auto group : groupMembershipList) {
-		rapidjson::Value entry(rapidjson::kObjectType);
-		entry.AddMember("name", group.groupName, alloc);
-		entry.AddMember("state", GroupMembership::to_string(group.state), alloc);
-		entry.AddMember("state_set_by", group.stateSetBy, alloc);
-		groupMemberships.PushBack(entry, alloc);
+	if(!omitGroups){
+		rapidjson::Value groupMemberships(rapidjson::kArrayType);
+		std::vector<GroupMembership> groupMembershipList = store.getUserGroupMemberships(uID);
+		for (auto group : groupMembershipList) {
+			rapidjson::Value entry(rapidjson::kObjectType);
+			entry.AddMember("name", group.groupName, alloc);
+			entry.AddMember("state", GroupMembership::to_string(group.state), alloc);
+			entry.AddMember("state_set_by", group.stateSetBy, alloc);
+			groupMemberships.PushBack(entry, alloc);
+		}
+		metadata.AddMember("group_memberships", groupMemberships, alloc);
 	}
-	metadata.AddMember("group_memberships", groupMemberships, alloc);
 	result.AddMember("metadata", metadata, alloc);
 	
 	return crow::response(to_string(result));
