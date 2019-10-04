@@ -36,9 +36,12 @@
           },
           "unix_id": {
             "type": "number"
+          },
+          "pending": {
+            "type": "boolean"
           }
         },
-        "required": ["name","display_name","purpose","email","phone","description","creation_date","unix_id"]
+        "required": ["name","display_name","purpose","email","phone","description","creation_date","unix_id","pending"]
       }
     }
   },
