@@ -1023,7 +1023,7 @@ bool PersistentStore::setUserStatusInGroup(const GroupMembership& membership){
 bool PersistentStore::removeUserFromGroup(const std::string& uID, std::string groupName){
 	//write non-member status to all caches
 	GroupMembership membership;
-	membership.valid=false;
+	membership.valid=true;
 	membership.userName=uID;
 	membership.groupName=groupName;
 	membership.state=GroupMembership::NonMember;

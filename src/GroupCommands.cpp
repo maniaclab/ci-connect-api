@@ -650,6 +650,8 @@ crow::response listGroupMembers(PersistentStore& store, const crow::request& req
 	rapidjson::Value resultItems(rapidjson::kArrayType);
 	resultItems.Reserve(memberships.size(), alloc);
 	for(const auto& membership : memberships){
+		if(membership.state==GroupMembership::NonMember)
+			continue;
 		rapidjson::Value userResult(rapidjson::kObjectType);
 		userResult.AddMember("user_name", membership.userName, alloc);
 		userResult.AddMember("state", GroupMembership::to_string(membership.state), alloc);
