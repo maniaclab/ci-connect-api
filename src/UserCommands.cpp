@@ -401,7 +401,9 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	metadata.AddMember("service_account", targetUser.serviceAccount, alloc);
 	rapidjson::Value groupMemberships(rapidjson::kArrayType);
 	std::vector<GroupMembership> groupMembershipList = store.getUserGroupMemberships(targetUser.unixName);
-	for (auto group : groupMembershipList) {
+	for (auto group : groupMembershipList) {	
+		if(group.state==GroupMembership::NonMember)
+			continue; //don't report any group of which the user is _not_ a member
 		rapidjson::Value entry(rapidjson::kObjectType);
 		entry.AddMember("name", group.groupName, alloc);
 		entry.AddMember("state", GroupMembership::to_string(group.state), alloc);
@@ -452,6 +454,8 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 		rapidjson::Value groupMemberships(rapidjson::kArrayType);
 		std::vector<GroupMembership> groupMembershipList = store.getUserGroupMemberships(uID);
 		for (auto group : groupMembershipList) {
+			if(group.state==GroupMembership::NonMember)
+				continue; //don't report any group of which the user is _not_ a member
 			rapidjson::Value entry(rapidjson::kObjectType);
 			entry.AddMember("name", group.groupName, alloc);
 			entry.AddMember("state", GroupMembership::to_string(group.state), alloc);
@@ -615,6 +619,8 @@ crow::response listUserGroups(PersistentStore& store, const crow::request& req, 
 	rapidjson::Value groupMemberships(rapidjson::kArrayType);
 	std::vector<GroupMembership> groupMembershipList = store.getUserGroupMemberships(uID);
 	for (auto membership : groupMembershipList) {
+		if(membership.state==GroupMembership::NonMember)
+			continue; //don't report any group of which the user is _not_ a member
 		rapidjson::Value entry(rapidjson::kObjectType);
 		entry.AddMember("name", membership.groupName, alloc);
 		entry.AddMember("state", GroupMembership::to_string(membership.state), alloc);

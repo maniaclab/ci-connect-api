@@ -621,8 +621,11 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, std
 	message.fromAddress="no-reply@ci-connect.net";
 	message.toAddresses={parentGroup.email};
 	message.bccAddresses.reserve(memberships.size());
-	for(const auto& membership : memberships)
+	for(const auto& membership : memberships){
+		if(membership.state==GroupMembership::NonMember)
+			continue; //ignore non-members who may have been reported
 		message.bccAddresses.push_back(store.getUser(membership.userName).email);
+	}
 	message.subject="CI-Connect group deleted";
 	message.body="This is an automatic notification that "+user.name+
 	" ("+user.unixName+") has deleted the "+targetGroup.displayName+
