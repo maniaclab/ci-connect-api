@@ -1664,6 +1664,12 @@ std::vector<GroupRequest> PersistentStore::listGroupRequests(){
 			gr.purpose=findOrThrow(item,"purpose","Group request record missing purpose attribute").GetS();
 			gr.description=findOrThrow(item,"description","Group request record missing description attribute").GetS();
 			gr.requester=findOrThrow(item,"requester","Group request record missing requester attribute").GetS();
+			auto extra=findOrThrow(item,"secondaryAttributes","Group Request record missing secondary attributes").GetM();
+			for(const auto& attr : extra){
+				if(attr.first=="dummy")
+					continue;
+				gr.secondaryAttributes[attr.first]=attr.second->GetS();
+			}
 			collected.push_back(gr);
 
 			CacheRecord<GroupRequest> record(gr,groupCacheValidity);
