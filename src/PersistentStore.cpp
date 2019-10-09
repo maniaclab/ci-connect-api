@@ -1359,8 +1359,6 @@ bool PersistentStore::addGroupRequest(const GroupRequest& gr){
 	}
 	
 	//update caches
-	CacheRecord<Group> recordAsGroup(Group(gr,""),groupCacheValidity);
-	replaceCacheRecord(groupCache,gr.name,recordAsGroup);
 	CacheRecord<GroupRequest> record(gr,groupCacheValidity);
 	replaceCacheRecord(groupRequestCache,gr.name,record);
         
@@ -1498,8 +1496,7 @@ bool PersistentStore::updateGroupRequest(const GroupRequest& request){
 	}
 	
 	//update caches
-	CacheRecord<Group> recordAsGroup(Group(request,""),groupCacheValidity);
-	replaceCacheRecord(groupCache,request.name,recordAsGroup);
+	groupCache.erase(request.name);
 	CacheRecord<GroupRequest> record(request,groupCacheValidity);
 	replaceCacheRecord(groupRequestCache,request.name,record);
 	
