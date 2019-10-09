@@ -33,9 +33,12 @@
           },
           "requester": {
             "type": "string"
+          },
+          "additional_attributes": {
+            "type": "object"
           }
         },
-        "required": ["name","display_name","purpose","email","phone","description","requester"]
+        "required": ["name","display_name","purpose","email","phone","description","requester","additional_attributes"]
       }
     }
   },

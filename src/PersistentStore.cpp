@@ -1359,6 +1359,8 @@ bool PersistentStore::addGroupRequest(const GroupRequest& gr){
 	}
 	
 	//update caches
+	CacheRecord<Group> recordAsGroup(Group(gr,""),groupCacheValidity);
+	replaceCacheRecord(groupCache,gr.name,recordAsGroup);
 	CacheRecord<GroupRequest> record(gr,groupCacheValidity);
 	replaceCacheRecord(groupRequestCache,gr.name,record);
         
@@ -1462,6 +1464,44 @@ bool PersistentStore::updateGroup(const Group& group){
 	//update caches
 	CacheRecord<Group> record(group,groupCacheValidity);
 	replaceCacheRecord(groupCache,group.name,record);
+	
+	return true;
+}
+
+bool PersistentStore::updateGroupRequest(const GroupRequest& request){
+	using AV=Aws::DynamoDB::Model::AttributeValue;
+	using AVU=Aws::DynamoDB::Model::AttributeValueUpdate;
+	
+	AV secondary;
+	secondary.AddMEntry("dummy",std::make_shared<AV>("dummy"));
+	for(const auto& entry : request.secondaryAttributes)
+		secondary.AddMEntry(entry.first,std::make_shared<AV>(entry.second));
+	
+	auto outcome=dbClient.UpdateItem(Aws::DynamoDB::Model::UpdateItemRequest()
+	                                 .WithTableName(groupTableName)
+	                                 .WithKey({{"name",AV(request.name)},
+	                                           {"sortKey",AV(request.name)}})
+	                                 .WithAttributeUpdates({
+	                                            {"displayName",AVU().WithValue(AV(request.displayName))},
+	                                            {"email",AVU().WithValue(AV(request.email))},
+	                                            {"phone",AVU().WithValue(AV(request.phone))},
+	                                            {"purpose",AVU().WithValue(AV(request.purpose))},
+	                                            {"description",AVU().WithValue(AV(request.description))},
+	                                            {"requester",AVU().WithValue(AV(request.requester))},
+	                                            {"secondaryAttributes",AVU().WithValue(secondary)}
+	                                            })
+	                                 );
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to update Group Request record: " << err.GetMessage());
+		return false;
+	}
+	
+	//update caches
+	CacheRecord<Group> recordAsGroup(Group(request,""),groupCacheValidity);
+	replaceCacheRecord(groupCache,request.name,recordAsGroup);
+	CacheRecord<GroupRequest> record(request,groupCacheValidity);
+	replaceCacheRecord(groupRequestCache,request.name,record);
 	
 	return true;
 }

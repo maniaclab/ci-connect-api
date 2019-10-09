@@ -559,6 +559,21 @@ crow::response updateGroupRequest(PersistentStore& store, const crow::request& r
 		targetRequest.description=body["metadata"]["description"].GetString();
 		doUpdate=true;
 	}
+	if(body["metadata"].HasMember("additional_attributes")){
+		if(!body["metadata"]["additional_attributes"].IsObject())
+			return crow::response(400,generateError("Incorrect type for additional attributes"));
+		for(const auto& entry : body["metadata"]["additional_attributes"].GetObject()){
+			if(!entry.value.IsString())
+				return crow::response(400,generateError("Incorrect type for Group additional attribute value"));
+			std::string key=entry.name.GetString();
+			std::string value=entry.value.GetString();
+			if(key.empty() || value.empty())
+				return crow::response(400,generateError("Additional group attribute keys and values cannot be empty strings"));
+			targetRequest.secondaryAttributes[key]=value;
+			doUpdate=true;
+		}
+	}
+	
 	
 	if(!doUpdate){
 		log_info("Requested update to " << targetRequest << " is trivial");
@@ -580,7 +595,7 @@ crow::response updateGroupRequest(PersistentStore& store, const crow::request& r
 		}
 	}
 	else
-		success=store.updateGroup(Group(targetRequest,timestamp()));
+		success=store.updateGroupRequest(targetRequest);
 	
 	if(!success){
 		log_error("Failed to update " << targetRequest);
@@ -758,6 +773,10 @@ crow::response getSubgroupRequests(PersistentStore& store, const crow::request& 
 		groupResult.AddMember("purpose", group.purpose, alloc);
 		groupResult.AddMember("description", group.description, alloc);
 		groupResult.AddMember("requester", group.requester, alloc);
+		rapidjson::Value secondary(rapidjson::kObjectType);
+		for(const auto& attr : group.secondaryAttributes)
+			secondary.AddMember(rapidjson::Value(attr.first,alloc), rapidjson::Value(attr.second,alloc), alloc);
+		groupResult.AddMember("additional_attributes", secondary, alloc);
 		resultItems.PushBack(groupResult, alloc);
 	}
 	result.AddMember("groups", resultItems, alloc);

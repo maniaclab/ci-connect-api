@@ -251,6 +251,8 @@ public:
 	///\return Whether the group record was successfully altered in the database
 	bool updateGroup(const Group& group);
 	
+	bool updateGroupRequest(const GroupRequest& request);
+	
 	///Find all users who belong to a group
 	///\groupID the ID of the group whose members are to be found
 	///\return the IDs of all members of the group
