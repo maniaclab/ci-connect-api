@@ -264,6 +264,8 @@ public:
 	
 	std::vector<GroupRequest> listGroupRequests();
 	
+	std::vector<GroupRequest> listGroupRequestsByRequester(const std::string& requester);
+	
 	///Find the group, if any, with the given UUID or name
 	///\param idOrName the UUID or name of the group to look up
 	///\return the group corresponding to the name, or an invalid group if none exists

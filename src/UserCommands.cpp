@@ -632,6 +632,49 @@ crow::response listUserGroups(PersistentStore& store, const crow::request& req, 
 	return crow::response(to_string(result));
 }
 
+crow::response listUserGroupRequests(PersistentStore& store, const crow::request& req, const std::string uID){
+	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to get group requests by " << uID);
+	if(!user)
+		return crow::response(403,generateError("Not authorized"));
+	
+	User targetUser;
+	if(user.unixName==uID)
+		targetUser=user;
+	else{
+		User targetUser=store.getUser(uID);
+		if(!targetUser)
+			return crow::response(404,generateError("Not found"));
+	}
+	//TODO: can anyone list anyone else's Group Requests?
+	
+	std::vector<GroupRequest> requests=store.listGroupRequestsByRequester(uID);
+
+	rapidjson::Document result(rapidjson::kObjectType);
+	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
+	
+	result.AddMember("apiVersion", "v1alpha1", alloc);
+	rapidjson::Value resultItems(rapidjson::kArrayType);
+	for(const GroupRequest& group : requests){
+		rapidjson::Value groupResult(rapidjson::kObjectType);
+		groupResult.AddMember("name", group.name, alloc);
+		groupResult.AddMember("display_name", group.displayName, alloc);
+		groupResult.AddMember("email", group.email, alloc);
+		groupResult.AddMember("phone", group.phone, alloc);
+		groupResult.AddMember("purpose", group.purpose, alloc);
+		groupResult.AddMember("description", group.description, alloc);
+		groupResult.AddMember("requester", group.requester, alloc);
+		rapidjson::Value secondary(rapidjson::kObjectType);
+		for(const auto& attr : group.secondaryAttributes)
+			secondary.AddMember(rapidjson::Value(attr.first,alloc), rapidjson::Value(attr.second,alloc), alloc);
+		groupResult.AddMember("additional_attributes", secondary, alloc);
+		resultItems.PushBack(groupResult, alloc);
+	}
+	result.AddMember("groups", resultItems, alloc);
+	
+	return crow::response(to_string(result));
+}
+
 namespace{
 	///\return the name of most closely enclosing group of which the user is an admin
 	std::string adminInAnyEnclosingGroup(PersistentStore& store, const std::string& userID, std::string groupName){

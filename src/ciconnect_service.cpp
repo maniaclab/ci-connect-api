@@ -331,6 +331,8 @@ int main(int argc, char* argv[]){
 	  [&](const crow::request& req, const std::string& uID, const std::string groupID){ return setUserStatusInGroup(store,req,uID,groupID); });
 	CROW_ROUTE(server, "/v1alpha1/users/<string>/groups/<string>").methods("DELETE"_method)(
 	  [&](const crow::request& req, const std::string& uID, const std::string groupID){ return removeUserFromGroup(store,req,uID,groupID); });
+	CROW_ROUTE(server, "/v1alpha1/users/<string>/group_requests").methods("GET"_method)(
+	  [&](const crow::request& req, const std::string& uID){ return listUserGroupRequests(store,req,uID); });
 	CROW_ROUTE(server, "/v1alpha1/users/<string>/attributes/<string>").methods("GET"_method)(
 	  [&](const crow::request& req, const std::string& uID, const std::string& attr){ return getUserAttribute(store,req,uID,attr); });
 	CROW_ROUTE(server, "/v1alpha1/users/<string>/attributes/<string>").methods("PUT"_method)(

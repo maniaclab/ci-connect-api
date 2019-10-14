@@ -411,6 +411,18 @@ void PersistentStore::InitializeGroupTable(){
 		                                  .WithReadCapacityUnits(1)
 		                                  .WithWriteCapacityUnits(1));
 	};
+	auto getByRequesterIndex=[](){
+		return GlobalSecondaryIndex()
+		       .WithIndexName("ByRequester")
+		       .WithKeySchema({KeySchemaElement()
+		                       .WithAttributeName("requester")
+		                       .WithKeyType(KeyType::HASH)})
+		       .WithProjection(Projection()
+		                       .WithProjectionType(ProjectionType::KEYS_ONLY))
+		       .WithProvisionedThroughput(ProvisionedThroughput()
+		                                  .WithReadCapacityUnits(1)
+		                                  .WithWriteCapacityUnits(1));
+	};
 	
 	//check status of the table
 	auto groupTableOut=dbClient.DescribeTable(DescribeTableRequest()
@@ -427,7 +439,8 @@ void PersistentStore::InitializeGroupTable(){
 		request.SetAttributeDefinitions({
 			AttDef().WithAttributeName("name").WithAttributeType(SAT::S),
 			AttDef().WithAttributeName("sortKey").WithAttributeType(SAT::S),
-			AttDef().WithAttributeName("unixID").WithAttributeType(SAT::N)
+			AttDef().WithAttributeName("unixID").WithAttributeType(SAT::N),
+			AttDef().WithAttributeName("requester").WithAttributeType(SAT::S)
 		});
 		request.SetKeySchema({
 			KeySchemaElement().WithAttributeName("name").WithKeyType(KeyType::HASH),
@@ -437,6 +450,7 @@ void PersistentStore::InitializeGroupTable(){
 		                                 .WithReadCapacityUnits(1)
 		                                 .WithWriteCapacityUnits(1));
 		request.AddGlobalSecondaryIndexes(getByUnixIDIndex());
+		request.AddGlobalSecondaryIndexes(getByRequesterIndex());
 		
 		auto createOut=dbClient.CreateTable(request);
 		if(!createOut.IsSuccess())
@@ -520,6 +534,15 @@ void PersistentStore::InitializeGroupTable(){
 				log_fatal("Failed to add by-UnixID index to group table: " + createOut.GetError().GetMessage());
 			waitIndexReadiness(dbClient,groupTableName,"ByUnixID");
 			log_info("Added by-UnixID index to group table");
+		}
+		if(!hasIndex(tableDesc,"ByRequester")){
+			auto request=updateTableWithNewSecondaryIndex(groupTableName,getByUnixIDIndex());
+			request.WithAttributeDefinitions({AttDef().WithAttributeName("requester").WithAttributeType(SAT::S)});
+			auto createOut=dbClient.UpdateTable(request);
+			if(!createOut.IsSuccess())
+				log_fatal("Failed to add by-Requester index to group table: " + createOut.GetError().GetMessage());
+			waitIndexReadiness(dbClient,groupTableName,"ByRequester");
+			log_info("Added by-Requester index to group table");
 		}
 	}
 }
@@ -1679,6 +1702,40 @@ std::vector<GroupRequest> PersistentStore::listGroupRequests(){
 	groupRequestCacheExpirationTime=std::chrono::steady_clock::now()+groupCacheValidity;
 	
 	return collected;
+}
+
+std::vector<GroupRequest> PersistentStore::listGroupRequestsByRequester(const std::string& requester){
+	//TODO: add caching for these queries?
+
+	using Aws::DynamoDB::Model::AttributeValue;
+	databaseQueries++;
+	log_info("Querying database for group requests by " << requester);
+	auto outcome=dbClient.Query(Aws::DynamoDB::Model::QueryRequest()
+	                            .WithTableName(groupTableName)
+	                            .WithIndexName("ByRequester")
+	                            .WithKeyConditionExpression("#requester = :id_val")
+	                            .WithExpressionAttributeNames({{"#requester","requester"}})
+								.WithExpressionAttributeValues({{":id_val",AttributeValue(requester)}})
+	                            );
+	std::vector<GroupRequest> requests;
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to fetch Group Request records: " << err.GetMessage());
+		return requests;
+	}
+	const auto& queryResult=outcome.GetResult();
+	requests.reserve(queryResult.GetCount());
+	for(const auto& item : queryResult.GetItems()){
+		std::string name=findOrThrow(item,"name","Group request record missing name attribute").GetS();
+		GroupRequest gr=getGroupRequest(name);
+		if(gr)
+			requests.push_back(gr);
+
+		CacheRecord<GroupRequest> record(gr,groupCacheValidity);
+		replaceCacheRecord(groupRequestCache,gr.name,record);
+	}
+	
+	return requests;
 }
 
 Group PersistentStore::getGroup(const std::string& groupName){

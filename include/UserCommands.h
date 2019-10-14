@@ -14,6 +14,7 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 crow::response updateUser(PersistentStore& store, const crow::request& req, const std::string uID);
 crow::response deleteUser(PersistentStore& store, const crow::request& req, const std::string uID);
 crow::response listUserGroups(PersistentStore& store, const crow::request& req, const std::string uID);
+crow::response listUserGroupRequests(PersistentStore& store, const crow::request& req, const std::string uID);
 crow::response setUserStatusInGroup(PersistentStore& store, const crow::request& req, 
                                     const std::string& uID, std::string groupID);
 crow::response removeUserFromGroup(PersistentStore& store, const crow::request& req, 

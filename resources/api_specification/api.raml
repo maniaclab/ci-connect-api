@@ -135,6 +135,31 @@ version: v1alpha1
             body:
               application/json:
                 type: !include ErrorResultSchema.json
+    /group_requests:
+      get:
+        description: List all of a user's pending requests for groups to be created
+        queryParameters:
+          token:
+            displayName: Access Token
+            type: string
+            description: User's authentication token
+            required: true
+        responses:
+          200:
+            description: Success
+            body:
+              application/json:
+                type: !include GroupRequestListResultSchema.json
+          403:
+            description: Authentication/authorization error
+            body:
+              application/json:
+                type: !include ErrorResultSchema.json
+          404: 
+            description: User not found
+            body:
+              application/json:
+                type: !include ErrorResultSchema.json
       /{group_name}:
         get:
           description: Get a user's membership status in a group
