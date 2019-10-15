@@ -1883,6 +1883,7 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 	}
 	{ //update the group cache
 		CacheRecord<Group> record(Group(gr,creationDate),groupCacheValidity);
+		record.record.pending=false; //explicitly mark as no longer pending
 		replaceCacheRecord(groupCache,gr.name,record);
 	}
 	

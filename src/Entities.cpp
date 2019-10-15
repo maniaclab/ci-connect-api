@@ -25,7 +25,8 @@ std::ostream& operator<<(std::ostream& os, const User& u){
 Group::Group(const GroupRequest& gr, std::string creationDate):
 valid(gr.valid && !creationDate.empty()),
 name(gr.name),displayName(gr.displayName),email(gr.email),phone(gr.phone),
-purpose(gr.purpose),description(gr.description),creationDate(std::move(creationDate))
+purpose(gr.purpose),description(gr.description),creationDate(std::move(creationDate)),
+pending(true)
 {}
 
 bool operator==(const Group& g1, const Group& g2){
