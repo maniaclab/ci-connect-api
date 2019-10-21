@@ -1819,7 +1819,7 @@ GroupRequest PersistentStore::getGroupRequest(const std::string& groupName){
 	GroupRequest gr;
 	gr.valid=true;
 	gr.name=groupName;
-	gr.displayName=findOrThrow(item,"email","Group Request record missing displayName attribute").GetS();
+	gr.displayName=findOrThrow(item,"displayName","Group Request record missing displayName attribute").GetS();
 	gr.email=findOrThrow(item,"email","Group Request record missing email attribute").GetS();
 	gr.phone=findOrThrow(item,"phone","Group Request record missing phone attribute").GetS();
 	gr.purpose=findOrThrow(item,"purpose","Group Request record missing purpose attribute").GetS();
