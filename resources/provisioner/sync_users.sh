@@ -279,18 +279,14 @@ for USER in $USERS_TO_CREATE; do
 	USER_ID=$(echo "$USER_DATA" | jq -r '.unix_id')
 	USER_NAME=$(echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(echo "$USER_DATA" | jq -r '.email')
-	USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^osg\(\..*\)*/p' | tr '\n' ',' | sed 's|,$||')
+	RAW_USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
+	USER_GROUPS=$(echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
 	useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 	set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(echo "$USER_DATA" | jq -r '.public_key')"
 	# OSG specific: Try to pick out the first group to which the user belongs and set it as the default 'project'
-	# However, we must not pick 'osg', so if it is BASE_GROUP_NAME and the first listed group we remove it from the list.
-	FILTERED_USER_GROUPS=$(echo "$USER_GROUPS" | sed 's|^'"$BASE_GROUP_NAME"',*||')
-	# Likewise, the login-nodes group is not (and its subgroups are not) valid 'projects', so we remove them as well
-	while echo "$FILTERED_USER_GROUPS" | grep "^osg.login-nodes" > /dev/null ; do
-		FILTERED_USER_GROUPS=$(echo "$FILTERED_USER_GROUPS" | sed 's|^osg.login-nodes[^,]*,*||')
-	done
-	# Finally extract the first remaining group
-	DEFAULT_GROUP=$(echo "$FILTERED_USER_GROUPS" | sed 's|,.*$||')
+	# However, we must not pick 'osg', or any of the login node groups, so we remove these from the list.
+	FILTERED_USER_GROUPS=$(echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
+	DEFAULT_GROUP=$(echo "$FILTERED_USER_GROUPS" | head -n 1)
 	set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 	echo "$USER" >> new_users
 done
@@ -308,10 +304,14 @@ for USER in $USERS_TO_UPDATE; do
 	echo "Updating user $USER"
 	USER_NAME=$(echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(echo "$USER_DATA" | jq -r '.email')
-	USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^osg\(\..*\)*/p' | tr '\n' ',' | sed 's|,$||')
+	RAW_USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
+	USER_GROUPS=$(echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
 	usermod -G "$USER_GROUPS" "$USER"
 	set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(echo "$USER_DATA" | jq -r '.public_key')"
-	DEFAULT_GROUP=$(echo "$USER_GROUPS" | sed 's|,.*$||')
+	# OSG specific: Try to pick out the first group to which the user belongs and set it as the default 'project'
+	# However, we must not pick 'osg', or any of the login node groups, so we remove these from the list.
+	FILTERED_USER_GROUPS=$(echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
+	DEFAULT_GROUP=$(echo "$FILTERED_USER_GROUPS" | head -n 1)
 	set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 done
 

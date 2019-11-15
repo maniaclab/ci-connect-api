@@ -32,6 +32,8 @@ crow::response listUsers(PersistentStore& store, const crow::request& req){
 		userData.AddMember("unix_id", user.unixID, alloc);
 		userData.AddMember("join_date", user.joinDate, alloc);
 		userData.AddMember("last_use_time", user.lastUseTime, alloc);
+		userData.AddMember("superuser", user.superuser, alloc);
+		userData.AddMember("service_account", user.serviceAccount, alloc);
 		userResult.AddMember("metadata", userData, alloc);
 		resultItems.PushBack(userResult, alloc);
 	}
