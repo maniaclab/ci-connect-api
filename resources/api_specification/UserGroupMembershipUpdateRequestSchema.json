@@ -17,6 +17,9 @@
         }
       },
       "required": ["name","state"]
+    },
+    "comment": {
+      "type": "string"
     }
   },
   "required": ["apiVersion","group_memberships"]

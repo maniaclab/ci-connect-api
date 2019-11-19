@@ -769,6 +769,13 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 		membership.state=GroupMembership::from_string(body["group_membership"]["state"].GetString());
 	}
 	
+	std::string comment;
+	if(body.HasMember("comment")){
+		if(!body["comment"].IsString())
+			return crow::response(400,generateError("Incorrect type for comment"));
+		comment=body["comment"].GetString();
+	}
+	
 	auto currentStatus=store.userStatusInGroup(targetUser.unixName,group.name);
 	if(membership.state==currentStatus.state) //no-op
 		return(crow::response(200));
@@ -841,6 +848,8 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 		message.subject="CI-Connect group membership request";
 		message.body="This is an automatic notification that "+targetUser.name+
 		" ("+targetUser.unixName+") has requested to join the "+group.displayName+" group.";
+		if(!comment.empty())
+			message.body+="\n\nComment from "+targetUser.name+":\n"+comment;
 		store.getEmailClient().sendEmail(message);
 	}
 	else{ //otherwise just inform the user
