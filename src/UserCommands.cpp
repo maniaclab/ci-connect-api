@@ -845,6 +845,12 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 		message.fromAddress="no-reply@ci-connect.net";
 		message.toAddresses={group.email};
 		message.ccAddresses={targetUser.email};
+		for(const auto& membership : store.getMembersOfGroup(group.name)){
+			if(membership.state==GroupMembership::Admin){
+				User admin=store.getUser(membership.userName);
+				message.toAddresses.push_back(admin.email);
+			}
+		}
 		message.subject="CI-Connect group membership request";
 		message.body="This is an automatic notification that "+targetUser.name+
 		" ("+targetUser.unixName+") has requested to join the "+group.displayName+" group.";
