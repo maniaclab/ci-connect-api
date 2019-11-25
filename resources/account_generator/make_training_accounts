@@ -1,0 +1,172 @@
+#!/bin/sh
+
+HELP="Usage: make_training_accounts number_of_accounts training_group_name
+
+    -e URL, --api-endpoint URL
+        Use URL as the endpoint at which to contact the CI-Connect API
+    -h, --help
+        Show this help message
+    -t token, --api-token token
+        Use token when contacting the CI-Connect API
+    --no-passphrases
+        Create keypairs without passphrases. This is less secure. 
+"
+
+# Read command line arguments
+POS=1
+while [ "$#" -gt 0 ]
+do
+	arg="$1"
+	shift
+	if [ "$arg" = "--help" -o "$arg" = "-h" ]; then
+		echo "$HELP"
+		exit 0
+	elif [ "$arg" = "--api-token" -o "$arg" = "-t" ]; then
+		if [ "$#" -lt 1 ]; then
+			echo "Error: Missing value after $arg option" 1>&2
+			exit 1
+		fi
+		API_TOKEN="$1"
+		shift
+	elif [ "$arg" = "--api-endpoint" -o "$arg" = "-e" ]; then
+		if [ "$#" -lt 1 ]; then
+			echo "Error: Missing value after $arg option" 1>&2
+			exit 1
+		fi
+		API_ENDPOINT="$1"
+		shift
+	elif [ "$arg" = "--no-passphrases" ]; then
+		NO_PASSPHRASES=1
+		shift
+	else
+		if [ "$POS" = 1 ]; then
+			NACCOUNTS="$arg"
+		elif [ "$POS" = 2 ]; then
+			ACCOUNT_GROUP="$arg"
+		else
+			echo "make_training_accounts: Too many arguments" 1>&2
+			exit 1
+		fi
+		POS=$(expr $POS + 1)
+	fi
+done
+
+if [ -z "$NACCOUNTS" -o -z "$ACCOUNT_GROUP" ]; then
+	echo "$HELP"
+	exit 0
+fi
+
+if ! echo "$NACCOUNTS" | grep -q '^[0-9][0-9]*$'; then 
+	echo "make_training_accounts: Number of accounts must be an integer" 1>&2
+	exit 1
+fi
+if ! echo "$ACCOUNT_GROUP" | grep -q '^root\..'; then 
+	echo "make_training_accounts: Group name must be fully qualified and may not be root" 1>&2
+	exit 1
+fi
+
+# making sure nothing is in the way
+if [ -e AccountData ]; then
+	echo "make_training_accounts: A file/directory named AccountData already exists" 1>&2
+	exit 1
+fi
+if [ -e AccountData.tgz ]; then
+	echo "make_training_accounts: A file/directory named AccountData.tgz already exists" 1>&2
+	exit 1
+fi
+
+# figure out whether the target group already exists
+
+GROUP_STATUS=$(curl -s ${API_ENDPOINT}/v1alpha1/groups/${ACCOUNT_GROUP}?token=${API_TOKEN})
+if [ "$?" -ne 0 ]; then
+	echo "make_training_accounts: Failed to contact CI-Connect API at $API_ENDPOINT" 1>&2
+	exit 1
+fi
+if echo "$GROUP_STATUS" | grep -q '"kind":"Group"'; then
+	echo "Target group already exists"
+else
+	echo "Target group does not exist; creating"
+	ENCLOSING_GROUP=$(echo "$ACCOUNT_GROUP" | sed 's|\.[^.]*$||')
+	DATA='{"apiVersion":"v1alpha1","metadata":{"name":"'"$ACCOUNT_GROUP"'",
+	"display_name":"Training Group","purpose":"Education",
+	"description":"A temporary group for training accounts","email":"none","phone":"none"}}'
+	RESULT=$(curl -s -X PUT -d "$DATA" \
+		"${API_ENDPOINT}/v1alpha1/groups/${ENCLOSING_GROUP}/subgroups/${ACCOUNT_GROUP}?token=${API_TOKEN}")
+	if [ "$?" -ne 0 ]; then
+		echo "make_training_accounts: Failed to create group: $RESULT" 1>&2
+		exit 1
+	fi
+fi
+
+# takes one argument, length, and generates a random string of printable ASCII
+# that many characters long, which is stored in $DATA
+randomData(){
+	LEN=$1
+	GEN=0
+	DATA=""
+	while [ "$GEN" -lt "$LEN" ]; do
+		S=$(head -c $LEN /dev/urandom | base64 | sed 's|[/+=]||g' | tr -d '\n')
+		DATA=$(printf "${DATA}${S}" | head -c $LEN)
+		GEN=$(printf "$DATA" | wc -c)
+	done
+}
+
+# takes two arguments:
+# - user name
+# - fully qualified group name
+makeMemberOfGroup(){
+	USR="$1"
+	GRP="$2"
+	echo "  Making $USR a member of $GRP"
+	RESULT=$(curl -s -X PUT -d '{"group_membership":{"state":"active"}}' \
+		"${API_ENDPOINT}/v1alpha1/groups/${GRP}/members/${USR}?token=${API_TOKEN}")
+	if [ "$?" -ne 0 ]; then
+		echo "make_training_accounts: Failed to add user $USR to group $GRP: $RESULT" 1>&2
+		exit 1
+	fi
+}
+
+mkdir AccountData
+
+# create the users, and add them to the necessary groups
+for IDX in $(seq 0 $(expr $NACCOUNTS - 1)); do
+	echo "Creating account $IDX"
+	
+	GLOBUS_ID=$(uuidgen)
+	NAME="Training Account ${IDX}"
+	UNIX_NAME="trainee_${IDX}"
+	PASSPHRASE=""
+	if [ -z "$NO_PASSPHRASES" ]; then
+		randomData 12
+		PASSPHRASE="${DATA}"
+	fi
+	ssh-keygen -q -f AccountData/key${IDX} -C "OSG temporary training account $IDX" -P "${PASSPHRASE}"
+	if [ "$?" -ne 0 ]; then
+		echo "make_training_accounts: Failed to create group: $RESULT" 1>&2
+		exit 1
+	fi
+	
+	DATA='{"apiVersion":"v1alpha1","metadata":{"globusID":"'${GLOBUS_ID}'",
+	"name":"'"${NAME}"'","email":"none","phone":"none","institution":"none",
+	"public_key":"'"$(cat AccountData/key${IDX}.pub)"'","unix_name":"'${UNIX_NAME}'"
+	,"superuser":false,"service_account":false}}'
+	RESULT=$(curl -s -X POST -d "$DATA" \
+		"${API_ENDPOINT}/v1alpha1/users?token=${API_TOKEN}")
+	if [ "$?" -ne 0 ]; then
+		echo "make_training_accounts: Failed to create user: $RESULT" 1>&2
+		exit 1
+	fi
+	
+	echo "${UNIX_NAME} key${IDX} ${PASSPHRASE}" >> AccountData/users.txt
+	
+	# Add the user to the appropriate group, and all enclosing groups. 
+	GROUP='root' # Membership in the root group is automatic
+	while [ "$GROUP" != "$ACCOUNT_GROUP" ]; do
+		# figure out the next group in the nesting
+		GROUP=$(echo "$ACCOUNT_GROUP" | sed 's|^\('"${GROUP}"'\.[^.]*\).*|\1|')
+		makeMemberOfGroup "$UNIX_NAME" "$GROUP"
+	done
+done
+
+tar czf AccountData.tgz AccountData
+rm -r AccountData
