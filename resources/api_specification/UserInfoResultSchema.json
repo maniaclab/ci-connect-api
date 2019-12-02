@@ -46,7 +46,7 @@
           "type": "boolean"
         },
         "join_date": {
-          "type": "boolean"
+          "type": "string"
         },
         "group_memberships": {
           "type": "array",
