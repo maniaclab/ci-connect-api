@@ -55,6 +55,7 @@ Every option which can be set as an argument to the executable can also be set v
 This file is used when the the API server starts up to set the properties of the root user. 
 It must contain, separated by newlines:
 
+- The root user's full name, which is typically `Root User`
 - The root user's name, which is typically `root`
 - The root user's email address
 - The root user's phone number
