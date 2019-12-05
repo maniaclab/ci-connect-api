@@ -1,0 +1,88 @@
+#!/bin/sh
+
+HELP="Usage: remove_training_accounts training_group_name
+
+    -e URL, --api-endpoint URL
+        Use URL as the endpoint at which to contact the CI-Connect API
+    -h, --help
+        Show this help message
+    -t token, --api-token token
+        Use token when contacting the CI-Connect API
+    --remove-group
+        Remove the training group, as well as all training accounts associated with it
+"
+
+# Read command line arguments
+POS=1
+while [ "$#" -gt 0 ]
+do
+	arg="$1"
+	shift
+	if [ "$arg" = "--help" -o "$arg" = "-h" ]; then
+		echo "$HELP"
+		exit 0
+	elif [ "$arg" = "--api-token" -o "$arg" = "-t" ]; then
+		if [ "$#" -lt 1 ]; then
+			echo "remove_training_accounts: Missing value after $arg option" 1>&2
+			exit 1
+		fi
+		API_TOKEN="$1"
+		shift
+	elif [ "$arg" = "--api-endpoint" -o "$arg" = "-e" ]; then
+		if [ "$#" -lt 1 ]; then
+			echo "remove_training_accounts: Missing value after $arg option" 1>&2
+			exit 1
+		fi
+		API_ENDPOINT="$1"
+		shift
+	elif [ "$arg" = "--remove-group" ]; then
+		REMOVE_GROUP=1
+	else
+		if [ "$POS" = 1 ]; then
+			ACCOUNT_GROUP="$arg"
+		else
+			echo "remove_training_accounts: Too many arguments" 1>&2
+			exit 1
+		fi
+		POS=$(expr $POS + 1)
+	fi
+done
+
+if [ -z "$ACCOUNT_GROUP" ]; then
+	echo "$HELP"
+	exit 0
+fi
+
+if ! echo "$ACCOUNT_GROUP" | grep -q '^root\..'; then 
+	echo "remove_training_accounts: Group name must be fully qualified and may not be root" 1>&2
+	exit 1
+fi
+
+GROUP_STATUS=$(curl -s ${API_ENDPOINT}/v1alpha1/groups/${ACCOUNT_GROUP}?token=${API_TOKEN})
+if [ "$?" -ne 0 ]; then
+	echo "remove_training_accounts: Failed to contact CI-Connect API at $API_ENDPOINT" 1>&2
+	exit 1
+fi
+if echo "$GROUP_STATUS" | grep -q '"kind":"Group"'; then
+	: #good
+else
+	echo "remove_training_accounts: Target group ($ACCOUNT_GROUP) not found" 1>&2
+	exit 1
+fi
+
+# Collect all of the training account names in this group, ignoring other users
+TRAINEES=$(curl -s ${API_ENDPOINT}/v1alpha1/groups/${ACCOUNT_GROUP}/members?token=${API_TOKEN} | tr '{,}' '\n\n\n' | sed -n 's|"user_name":"\(trainee[^"]*\)"|\1|p')
+if [ "$?" -ne 0 ]; then
+	echo "remove_training_accounts: Failed to list members of group ${ACCOUNT_GROUP}" 1>&2
+	exit 1
+fi
+
+for TRAINEE in $TRAINEES; do
+	echo "Deleting user $TRAINEE"
+	curl -s -X DELETE ${API_ENDPOINT}/v1alpha1/users/${TRAINEE}?token=${API_TOKEN}
+done
+
+if [ "$REMOVE_GROUP" ]; then
+	echo "Deleting group $ACCOUNT_GROUP"
+	curl -s -X DELETE ${API_ENDPOINT}/v1alpha1/groups/${ACCOUNT_GROUP}?token=${API_TOKEN}
+fi
