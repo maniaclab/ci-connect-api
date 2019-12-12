@@ -270,8 +270,12 @@ set_default_project(){
 # Ensure that all active users have accounts
 cat /dev/null > new_users
 for USER in $USERS_TO_CREATE; do
+	if [ -f user_data -a ! -s user_data ]; then
+		echo "user_data is empty!" 1>&2
+		exit 1
+	fi
 	USER_DATA=$(jq 'select(.unix_name==("'${USER}'"))' user_data)
-	if [ $(echo "$USER_DATA" | jq '.service_account') = "true" ]; then
+	if [ "$(echo "$USER_DATA" | jq '.service_account')" = "true" ]; then
 		echo "Skipping user $USER which is a service account"
 		continue
 	fi
@@ -292,6 +296,10 @@ for USER in $USERS_TO_CREATE; do
 done
 cat existing_users new_users | sort | uniq > existing_users.new
 mv existing_users.new existing_users
+if [ "$?" -ne 0 ]; then
+	echo "Failed to replace existing_users file" 1>&2
+	exit 1
+fi
 rm new_users
 
 # Ensure that previously existing users have updated information
