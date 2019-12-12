@@ -8,7 +8,7 @@ HELP="Usage: sync_users.sh [OPTION]...
         Use URL as the endpoint at which to contact the CI-Connect API
     -g group, --group-group group
         Use group as the group membership source group, the group from which to 
-        collect subgroups to which users  may belong. This can be different from
+        collect subgroups to which users may belong. This can be different from
         the user source group (specified with -u), but should probably be an
         enclosing group of the user source group.
     -h, --help
@@ -22,6 +22,8 @@ HELP="Usage: sync_users.sh [OPTION]...
         Remove all users and groups previously provisioned. This operation will
         permanently destroy any data in users' home directories which has not 
         been copied elsewhere. 
+    --dry-run
+        Report changes which would be made, without actually making any. 
 "
 
 # Read command line arguments
@@ -70,11 +72,17 @@ do
 		shift
 	elif [ "$arg" = "--wipe" ]; then
 		DO_WIPE=1
+	elif [ "$arg" = "--dry-run" ]; then
+		DRY_RUN=1
 	else
 		echo "Error: Unexpected argument: $arg" 1>&2
 		exit 1
 	fi
 done
+
+if [ "$DRY_RUN" ]; then
+	echo "Dry run; no changes will be made"
+fi
 
 if [ "$DO_WIPE" ]; then
 	echo "Warning: Erasing all provisioned users and groups in 5 seconds"
@@ -83,18 +91,30 @@ if [ "$DO_WIPE" ]; then
 	if [ -f existing_users ]; then
 		for DEFUNCT_USER in $(cat existing_users); do
 			echo "Deleting user $DEFUNCT_USER"
-			userdel -r "$DEFUNCT_USER"
-			sed '/^'"$DEFUNCT_USER"'$/d' existing_users > existing_users.new
-			mv existing_users.new existing_users
+			if [ ! "$DRY_RUN" ]; then
+				userdel -r "$DEFUNCT_USER"
+				if [ "$?" -ne 0 ]; then
+					echo "Failed to delete user" 1>&2
+					exit 1
+				fi
+				sed '/^'"$DEFUNCT_USER"'$/d' existing_users > existing_users.new
+				mv existing_users.new existing_users
+			fi
 		done
 	fi
 	# erase groups
 	if [ -f existing_groups ]; then
 		for DEFUNCT_GROUP in $(cat existing_groups); do
 			echo "Deleting group $DEFUNCT_GROUP"
-			groupdel "$DEFUNCT_GROUP"
-			sed '/^'"$DEFUNCT_GROUP"'$/d' existing_groups > existing_groups.new
-			mv existing_groups.new existing_groups
+			if [ ! "$DRY_RUN" ]; then
+				groupdel "$DEFUNCT_GROUP"
+				if [ "$?" -ne 0 ]; then
+					echo "Failed to delete group" 1>&2
+					exit 1
+				fi
+				sed '/^'"$DEFUNCT_GROUP"'$/d' existing_groups > existing_groups.new
+				mv existing_groups.new existing_groups
+			fi
 		done
 	fi
 	exit
@@ -127,12 +147,14 @@ if [ -z "$HOME_DIR_ROOT" ]; then
 	echo "HOME_DIR_ROOT not set, using default value $HOME_DIR_ROOT"
 fi
 
-# Ensure that the existing users list exists
-if [ ! -f existing_users ]; then
-	touch existing_users
-fi
-if [ ! -f existing_groups ]; then
-	touch existing_groups
+if [ ! "$DRY_RUN" ]; then
+	# Ensure that the existing user/group lists exist
+	if [ ! -f existing_users ]; then
+		touch existing_users
+	fi
+	if [ ! -f existing_groups ]; then
+		touch existing_groups
+	fi
 fi
 
 # Get all members of the group
@@ -195,9 +217,11 @@ echo "$ACTIVE_USERS
 $DISABLED_USERS" | sort > all_users
 for DEFUNCT_USER in $(join -v1 existing_users all_users); do
 	echo "Deleting user $DEFUNCT_USER"
-	userdel -r "$DEFUNCT_USER"
-	sed '/^'"$DEFUNCT_USER"'$/d' existing_users > existing_users.new
-	mv existing_users.new existing_users
+	if [ ! "$DRY_RUN" ]; then
+		userdel -r "$DEFUNCT_USER"
+		sed '/^'"$DEFUNCT_USER"'$/d' existing_users > existing_users.new
+		mv existing_users.new existing_users
+	fi
 done
 rm all_users
 
@@ -206,35 +230,46 @@ rm all_users
 # the primary group of a user which was deleted. 
 for DEFUNCT_GROUP in $(printf "%s\n%s" "$BASE_GROUP_NAME" "$SUBGROUPS" | sort | join -v1 existing_groups -); do
 	echo "Deleting group $DEFUNCT_GROUP"
-	groupdel "$DEFUNCT_GROUP"
-	sed '/^'"$DEFUNCT_GROUP"'$/d' existing_groups > existing_groups.new
-	mv existing_groups.new existing_groups
+	if [ ! "$DRY_RUN" ]; then
+		groupdel "$DEFUNCT_GROUP"
+		sed '/^'"$DEFUNCT_GROUP"'$/d' existing_groups > existing_groups.new
+		mv existing_groups.new existing_groups
+	fi
 done
 
 # Create groups which are needed and don't yet exist
 if grep -q "^${BASE_GROUP_NAME}:" /etc/group; then
 	echo "Group $BASE_GROUP_NAME already exists"
 else
-	echo "Creating group $BASE_GROUP_NAME"
 	GID=$(curl "${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}?token=${API_TOKEN}" | jq -r '.metadata.unix_id')
-	groupadd "$BASE_GROUP_NAME" -g $GID
-fi
-for GROUP in $SUBGROUPS; do
-	if grep -q "^${GROUP}:" /etc/group; then
-		echo "Group $GROUP already exists"
-	else
-		echo "Creating group $GROUP"
-		GID=$(jq -r '.groups | map(select(.name==("'"${BASE_GROUP_CONTEXT}${GROUP}"'"))) | map(.unix_id)[0]' subgroups.json)
-		# echo "group data:"; jq -r '.groups | map(select(.name==("'"${GROUP_ROOT_GROUP}.${GROUP}"'")))' subgroups.json
-		groupadd "$GROUP" -g $GID
+	echo "Creating group $BASE_GROUP_NAME with gid $GID"
+	if [ ! "$DRY_RUN" ]; then
+		groupadd "$BASE_GROUP_NAME" -g $GID
 		if [ "$?" -ne 0 ]; then
 			echo "Aborting due to group creation error" 1>&2
 			exit 1
 		fi
 	fi
+fi
+for GROUP in $SUBGROUPS; do
+	if grep -q "^${GROUP}:" /etc/group; then
+		echo "Group $GROUP already exists"
+	else
+		GID=$(jq -r '.groups | map(select(.name==("'"${BASE_GROUP_CONTEXT}${GROUP}"'"))) | map(.unix_id)[0]' subgroups.json)
+		echo "Creating group $GROUP with gid $GID"
+		if [ ! "$DRY_RUN" ]; then
+			groupadd "$GROUP" -g $GID
+			if [ "$?" -ne 0 ]; then
+				echo "Aborting due to group creation error" 1>&2
+				exit 1
+			fi
+		fi
+	fi
 done
-printf "%s\n%s" "$BASE_GROUP_NAME" "$SUBGROUPS" | cat existing_groups - | sort | uniq > existing_groups.new
-mv existing_groups.new existing_groups
+if [ ! "$DRY_RUN" ]; then
+	printf "%s\n%s" "$BASE_GROUP_NAME" "$SUBGROUPS" | cat existing_groups - | sort | uniq > existing_groups.new
+	mv existing_groups.new existing_groups
+fi
 
 USERS_TO_CREATE=$(echo "$ACTIVE_USERS" | join -v2 existing_users -)
 USERS_TO_UPDATE=$(echo "$ACTIVE_USERS" | join existing_users -)
@@ -279,28 +314,32 @@ for USER in $USERS_TO_CREATE; do
 		echo "Skipping user $USER which is a service account"
 		continue
 	fi
-	echo "Creating user $USER"
 	USER_ID=$(echo "$USER_DATA" | jq -r '.unix_id')
 	USER_NAME=$(echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(echo "$USER_DATA" | jq -r '.email')
 	RAW_USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
 	USER_GROUPS=$(echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
-	useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
-	set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(echo "$USER_DATA" | jq -r '.public_key')"
-	# OSG specific: Try to pick out the first group to which the user belongs and set it as the default 'project'
-	# However, we must not pick 'osg', or any of the login node groups, so we remove these from the list.
-	FILTERED_USER_GROUPS=$(echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
-	DEFAULT_GROUP=$(echo "$FILTERED_USER_GROUPS" | head -n 1)
-	set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
-	echo "$USER" >> new_users
+	echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS"
+	if [ ! "$DRY_RUN" ]; then
+		useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+		set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(echo "$USER_DATA" | jq -r '.public_key')"
+		# OSG specific: Try to pick out the first group to which the user belongs and set it as the default 'project'
+		# However, we must not pick 'osg', or any of the login node groups, so we remove these from the list.
+		FILTERED_USER_GROUPS=$(echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
+		DEFAULT_GROUP=$(echo "$FILTERED_USER_GROUPS" | head -n 1)
+		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
+		echo "$USER" >> new_users
+	fi
 done
-cat existing_users new_users | sort | uniq > existing_users.new
-mv existing_users.new existing_users
-if [ "$?" -ne 0 ]; then
-	echo "Failed to replace existing_users file" 1>&2
-	exit 1
+if [ ! "$DRY_RUN" ]; then
+	cat existing_users new_users | sort | uniq > existing_users.new
+	mv existing_users.new existing_users
+	if [ "$?" -ne 0 ]; then
+		echo "Failed to replace existing_users file" 1>&2
+		exit 1
+	fi
+	rm new_users
 fi
-rm new_users
 
 # Ensure that previously existing users have updated information
 for USER in $USERS_TO_UPDATE; do
@@ -309,24 +348,28 @@ for USER in $USERS_TO_UPDATE; do
 		echo "Skipping $USER which is a service account"
 		continue
 	fi
-	echo "Updating user $USER"
 	USER_NAME=$(echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(echo "$USER_DATA" | jq -r '.email')
 	RAW_USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
 	USER_GROUPS=$(echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
-	usermod -G "$USER_GROUPS" "$USER"
-	set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(echo "$USER_DATA" | jq -r '.public_key')"
-	# OSG specific: Try to pick out the first group to which the user belongs and set it as the default 'project'
-	# However, we must not pick 'osg', or any of the login node groups, so we remove these from the list.
-	FILTERED_USER_GROUPS=$(echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
-	DEFAULT_GROUP=$(echo "$FILTERED_USER_GROUPS" | head -n 1)
-	set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
+	echo "Updating user $USER with groups $USER_GROUPS"
+	if [ ! "$DRY_RUN" ]; then
+		usermod -G "$USER_GROUPS" "$USER"
+		set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(echo "$USER_DATA" | jq -r '.public_key')"
+		# OSG specific: Try to pick out the first group to which the user belongs and set it as the default 'project'
+		# However, we must not pick 'osg', or any of the login node groups, so we remove these from the list.
+		FILTERED_USER_GROUPS=$(echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
+		DEFAULT_GROUP=$(echo "$FILTERED_USER_GROUPS" | head -n 1)
+		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
+	fi
 done
 
 # Ensure that all disabled users have their ssh keys removed
 for USER in $DISABLED_USERS; do
 	echo "Disabling user $USER"
-	if [ -f "${HOME_DIR_ROOT}/${USER}/.ssh/authorized_keys" ]; then
-		cat /dev/null > "${HOME_DIR_ROOT}/${USER}/.ssh/authorized_keys"
+	if [ ! "$DRY_RUN" ]; then
+		if [ -f "${HOME_DIR_ROOT}/${USER}/.ssh/authorized_keys" ]; then
+			cat /dev/null > "${HOME_DIR_ROOT}/${USER}/.ssh/authorized_keys"
+		fi
 	fi
 done
