@@ -348,7 +348,36 @@ private:
 	///Turn a group name suitable for dynamo back to normal
 	std::string decodeGroupName(std::string name);
 	
-	unsigned int allocatedUnixID(const std::string& tableName, const std::string& nameKeyName, const unsigned int minID, const unsigned int maxID);
+	unsigned int getNextIDHint(const std::string& tableName, const std::string& nameKeyName);
+	bool checkIDAvailability(const std::string& tableName, 
+	                         const std::string& nameKeyName,
+	                         unsigned int id);
+	bool reserveUnixID(const std::string& tableName, 
+	                   const std::string& nameKeyName,
+	                   unsigned int expected,
+	                   unsigned int id,
+	                   unsigned int next,
+	                   const std::string& recordName);
+	
+	///\param tableName the name of the table in which to allocate the ID
+	///\param nameKeyName the name used for the hash key used by the table in 
+	///                   which the ID is to be allocated
+	///\param minID the minimum allowed ID number in the table, as part of a 
+	///                 half-open range
+	///\param maxID the maximum allowed ID number in the table, as part of a 
+	///                 half-open range
+	///\param recordName the name of the record for which the ID will be allocated
+	unsigned int allocateUnixID(const std::string& tableName, 
+	                            const std::string& nameKeyName, 
+	                            const unsigned int minID, 
+	                            const unsigned int maxID, 
+	                            std::string recordName);
+	bool allocateSpecificUnixID(const std::string& tableName, 
+	                            const std::string& nameKeyName, 
+	                            const unsigned int minID, 
+	                            const unsigned int maxID, 
+	                            std::string recordName,
+	                            unsigned int targetID);
 	
 	std::atomic<size_t> cacheHits, databaseQueries, databaseScans;
 };

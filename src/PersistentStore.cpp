@@ -18,6 +18,7 @@
 #include <aws/dynamodb/model/QueryRequest.h>
 #include <aws/dynamodb/model/ScanRequest.h>
 #include <aws/dynamodb/model/UpdateItemRequest.h>
+#include <aws/dynamodb/model/TransactWriteItemsRequest.h>
 
 #include <aws/dynamodb/model/CreateGlobalSecondaryIndexAction.h>
 #include <aws/dynamodb/model/CreateTableRequest.h>
@@ -573,87 +574,149 @@ void PersistentStore::InitializeTables(std::string bootstrapUserFile){
 	InitializeGroupTable();
 }
 
-unsigned int PersistentStore::allocatedUnixID(const std::string& tableName, const std::string& nameKeyName, const unsigned int minID, const unsigned int maxID){
-	auto readNext=[&]()->unsigned int{
-		databaseQueries++;
-		using Aws::DynamoDB::Model::AttributeValue;
-		auto outcome=dbClient.GetItem(Aws::DynamoDB::Model::GetItemRequest()
-									  .WithTableName(tableName)
-									  .WithKey({{nameKeyName,AttributeValue(nextIDKeyName)},
-												{"sortKey",AttributeValue(nextIDKeyName)}}));
-		if(!outcome.IsSuccess()){
-			auto err=outcome.GetError();
-			log_fatal("Failed to fetch unix ID record: " << err.GetMessage());
-		}
-		const auto& item=outcome.GetResult().GetItem();
-		if(item.empty()) //no match found
-			log_fatal(nextIDKeyName + " not found in " + tableName);
-		return std::stoul(findOrThrow(item,"next_unixID","record missing next_unixID attribute").GetN());
-	};
-	auto checkAvailability=[&](unsigned int id)->bool{
-		databaseQueries++;
-		using Aws::DynamoDB::Model::AttributeValue;
-		auto request=Aws::DynamoDB::Model::QueryRequest()
-			.WithTableName(tableName)
-			.WithIndexName("ByUnixID")
-			.WithKeyConditionExpression("#id = :id_val")
-			.WithExpressionAttributeNames({
-				{"#id","unixID"}
-			})
-			.WithExpressionAttributeValues({
-				{":id_val",AttributeValue().SetN(std::to_string(id))}
-			});
-		auto outcome=dbClient.Query(request);
-		if(!outcome.IsSuccess()){
-			auto err=outcome.GetError();
-			log_fatal("Failed to fetch unix ID record: " << err.GetMessage());
-		}
-		const auto& queryResult=outcome.GetResult();
-		return queryResult.GetCount()==0;
-	};
-	auto obtain=[&](unsigned int id, unsigned int next)->bool{
-		using Aws::DynamoDB::Model::AttributeValue;
-		using Aws::DynamoDB::Model::AttributeValueUpdate;
-		auto request=Aws::DynamoDB::Model::UpdateItemRequest()
+unsigned int PersistentStore::getNextIDHint(const std::string& tableName, 
+                                            const std::string& nameKeyName){
+	databaseQueries++;
+	using Aws::DynamoDB::Model::AttributeValue;
+	auto outcome=dbClient.GetItem(Aws::DynamoDB::Model::GetItemRequest()
+								  .WithTableName(tableName)
+								  .WithKey({{nameKeyName,AttributeValue(nextIDKeyName)},
+											{"sortKey",AttributeValue(nextIDKeyName)}}));
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_fatal("Failed to fetch unix ID record: " << err.GetMessage());
+	}
+	const auto& item=outcome.GetResult().GetItem();
+	if(item.empty()) //no match found
+		log_fatal(nextIDKeyName + " not found in " + tableName);
+	return std::stoul(findOrThrow(item,"next_unixID","record missing next_unixID attribute").GetN());
+}
+
+bool PersistentStore::checkIDAvailability(const std::string& tableName, 
+	                                      const std::string& nameKeyName,
+	                                      unsigned int id){
+	databaseQueries++;
+	using Aws::DynamoDB::Model::AttributeValue;
+	auto request=Aws::DynamoDB::Model::QueryRequest()
 		.WithTableName(tableName)
-		.WithKey({{nameKeyName,AttributeValue(nextIDKeyName)},
-	              {"sortKey",AttributeValue(nextIDKeyName)}})
-		.WithUpdateExpression("SET #id = :new_val")
-		.WithConditionExpression("#id = :old_val")
+		.WithIndexName("ByUnixID")
+		.WithKeyConditionExpression("#id = :id_val")
 		.WithExpressionAttributeNames({
-			{"#id","next_unixID"}
+			{"#id","unixID"}
 		})
 		.WithExpressionAttributeValues({
-			{":old_val",AttributeValue().SetN(std::to_string(id))},
-			{":new_val",AttributeValue().SetN(std::to_string(next))}
+			{":id_val",AttributeValue().SetN(std::to_string(id))}
 		});
-		auto outcome=dbClient.UpdateItem(request);
-		if(!outcome.IsSuccess()){
-			auto err=outcome.GetError();
-			log_fatal("Failed to update next unix ID record: " << err.GetMessage());
-		}
-		return true;
-	};
+	auto outcome=dbClient.Query(request);
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_fatal("Failed to fetch unix ID record: " << err.GetMessage());
+	}
+	const auto& queryResult=outcome.GetResult();
+	return queryResult.GetCount()==0;
+}
+
+bool PersistentStore::reserveUnixID(const std::string& tableName, 
+	               const std::string& nameKeyName,
+	               unsigned int expected,
+	               unsigned int id,
+	               unsigned int next,
+	               const std::string& recordName){
+	using Aws::DynamoDB::Model::AttributeValue;
+	using Aws::DynamoDB::Model::AttributeValueUpdate;
+	using Aws::DynamoDB::Model::TransactWriteItem;
+	
+	auto request=Aws::DynamoDB::Model::TransactWriteItemsRequest()
+	.WithTransactItems({
+		TransactWriteItem().WithUpdate(
+			Aws::DynamoDB::Model::Update()
+			.WithTableName(tableName)
+			.WithKey({{nameKeyName,AttributeValue(nextIDKeyName)},
+					  {"sortKey",AttributeValue(nextIDKeyName)}})
+			.WithUpdateExpression("SET #id = :new_val")
+			.WithConditionExpression("#id = :old_val")
+			.WithExpressionAttributeNames({
+				{"#id","next_unixID"}
+			})
+			.WithExpressionAttributeValues({
+				{":old_val",AttributeValue().SetN(std::to_string(expected))},
+				{":new_val",AttributeValue().SetN(std::to_string(next))}
+			})
+		),
+		TransactWriteItem().WithPut(
+			Aws::DynamoDB::Model::Put()
+			.WithTableName(tableName)
+			.WithItem({
+				{nameKeyName,AttributeValue(recordName)},
+				{"sortKey",AttributeValue(recordName)},
+				{"unixID",AttributeValue().SetN(std::to_string(id))}
+			})
+		),
+	});
+	auto outcome=dbClient.TransactWriteItems(request);
+	if(!outcome.IsSuccess()){
+		auto err=outcome.GetError();
+		log_error("Failed to update next unix ID record: " << err.GetMessage());
+		return false;
+	}
+	return true;
+}
+
+unsigned int PersistentStore::allocateUnixID(const std::string& tableName, const std::string& nameKeyName, const unsigned int minID, const unsigned int maxID, std::string recordName){
+	auto readNext=[&]()->unsigned int{return getNextIDHint(tableName,nameKeyName);};
 	
 	unsigned int initialID=readNext();
+	log_info("Next ID hint: " << initialID);
 	unsigned int tryID=initialID;
 	while(true){
 		unsigned int nextID=tryID+1;
 		if(nextID==maxID)
 			nextID=minID;
-		if(checkAvailability(tryID)){
-			if(obtain(tryID,nextID))
+		if(checkIDAvailability(tableName,nameKeyName,tryID)){
+			//if(obtain(initialID,tryID,nextID))
+			if(reserveUnixID(tableName,nameKeyName,initialID,tryID,nextID,recordName)){
+				log_info("Allocated ID " << tryID);
 				return tryID;
+			}
 		}
-		
-		tryID=nextID;
-		if(tryID==initialID)
-			log_fatal("Unable to allocate numeric unix ID");
+		unsigned int recommendedNext=readNext();
+		if(recommendedNext==initialID){
+			if(nextID==initialID)
+				log_fatal("Unable to allocate numeric unix ID");
+			tryID=nextID;
+		}
+		else{
+			tryID=initialID=recommendedNext;
+			log_info("Next ID hint: " << initialID);
+		}
+	}
+}
+
+bool PersistentStore::allocateSpecificUnixID(const std::string& tableName, 
+const std::string& nameKeyName, const unsigned int minID, const unsigned int maxID, 
+std::string recordName, unsigned int targetID){
+	auto readNext=[&]()->unsigned int{return getNextIDHint(tableName,nameKeyName);};
+	
+	unsigned int initialID=readNext();
+	while(true){
+		if(!checkIDAvailability(tableName,nameKeyName,targetID))
+			return false;
+		if(reserveUnixID(tableName,nameKeyName,initialID,targetID,initialID,recordName))
+			return true;
+		unsigned int initialID=readNext();
 	}
 }
 
 bool PersistentStore::addUser(const User& user){
-	unsigned int userID=allocatedUnixID(userTableName, "unixName", minimumUserID, maximumUserID);
+	unsigned int userID=0;
+	if(user.unixID!=0){
+		userID=user.unixID;
+		bool reserved=allocateSpecificUnixID(userTableName,"unixName",minimumUserID,maximumUserID,user.unixName,userID);
+		if(!reserved)
+			log_fatal("Existing user ID (" << userID << ") is already in use");
+	}
+	else
+		userID=allocateUnixID(userTableName,"unixName",minimumUserID,maximumUserID,user.unixName);
 
 	using Aws::DynamoDB::Model::AttributeValue;
 	auto request=Aws::DynamoDB::Model::PutItemRequest()
@@ -1319,7 +1382,16 @@ bool PersistentStore::addGroup(const Group& group){
 	if(group.description.empty())
 		throw std::runtime_error("Group description must not be empty because Dynamo");
 	
-	unsigned int groupID=allocatedUnixID(groupTableName, "name", minimumGroupID, maximumGroupID);
+	unsigned int groupID=0;
+	if(group.unixID!=0){
+		groupID=group.unixID;
+		log_info("allocating group with ID " << groupID);
+		bool reserved=allocateSpecificUnixID(groupTableName, "name", minimumGroupID, maximumGroupID, group.name, groupID);
+		if(!reserved)
+			log_fatal("Existing group ID (" << groupID << ") is already in use");
+	}
+	else
+		groupID=allocateUnixID(groupTableName, "name", minimumGroupID, maximumGroupID, group.name);
 		
 	using AV=Aws::DynamoDB::Model::AttributeValue;
 	auto outcome=dbClient.PutItem(Aws::DynamoDB::Model::PutItemRequest()
@@ -1848,7 +1920,7 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 		return false;
 	}
 	
-	unsigned int groupID=allocatedUnixID(groupTableName, "name", minimumGroupID, maximumGroupID);
+	unsigned int groupID=allocateUnixID(groupTableName, "name", minimumGroupID, maximumGroupID, groupName);
 	
 	std::string creationDate=timestamp();
 	using AV=Aws::DynamoDB::Model::AttributeValue;

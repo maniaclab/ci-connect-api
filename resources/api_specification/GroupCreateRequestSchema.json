@@ -29,6 +29,9 @@
         "description": {
           "type": "string"
         },
+        "unix_id":{
+          "type": "integer"
+        },
         "additional_attributes": {
           "type": "object"
         }

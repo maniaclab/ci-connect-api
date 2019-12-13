@@ -307,6 +307,10 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 		log_warn("Service account flag in user creation request was not a string");
 		return crow::response(400,generateError("Incorrect type for user service account flag"));
 	}
+	if(body["metadata"].HasMember("unix_id") && !body["metadata"]["unix_id"].IsUint()){
+		log_warn("Unix ID in user creation request was not an unsigned integer");
+		return crow::response(400,generateError("Incorrect type for user unix ID"));
+	}
 	
 	User targetUser;
 	targetUser.token=idGenerator.generateUserToken();
@@ -353,6 +357,9 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	}
 	targetUser.superuser=body["metadata"]["superuser"].GetBool();
 	targetUser.serviceAccount=body["metadata"]["service_account"].GetBool();
+	if(body["metadata"].HasMember("unix_id")){
+		targetUser.unixID=body["metadata"]["unix_id"].GetUint();
+	}
 	targetUser.joinDate=timestamp();
 	targetUser.lastUseTime=targetUser.joinDate;
 	targetUser.valid=true;

@@ -9,9 +9,9 @@
 
 ///Represents a user account
 struct User{
-	User():valid(false),superuser(false){}
+	User():valid(false),unixID(0),superuser(false){}
 	explicit User(std::string name):
-	valid(true),name(std::move(name)),superuser(false),serviceAccount(false){}
+	valid(true),name(std::move(name)),unixID(0),superuser(false),serviceAccount(false){}
 	
 	///Indicates whether the account exists/is valid
 	bool valid;
@@ -41,8 +41,8 @@ std::ostream& operator<<(std::ostream& os, const User& u);
 struct GroupRequest;
 
 struct Group{
-	Group():valid(false),pending(false){}
-	explicit Group(std::string name):valid(true),name(std::move(name)),pending(false){}
+	Group():valid(false),unixID(0),pending(false){}
+	explicit Group(std::string name):valid(true),name(std::move(name)),unixID(0),pending(false){}
 	explicit Group(const GroupRequest& gr, std::string creationDate);
 	
 	///Indicates whether the Group exists/is valid

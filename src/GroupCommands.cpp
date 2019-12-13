@@ -180,6 +180,11 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	if(body["metadata"].HasMember("description") && !body["metadata"]["description"].IsString())
 		return crow::response(400,generateError("Incorrect type for Group description"));
 		
+	if(body["metadata"].HasMember("unix_id") && !body["metadata"]["unix_id"].IsUint()){
+		log_warn("Unix ID in group creation request was not an unsigned integer");
+		return crow::response(400,generateError("Incorrect type for group unix ID"));
+	}
+		
 	if(body["metadata"].HasMember("additional_attributes") && !body["metadata"]["additional_attributes"].IsObject())
 		return crow::response(400,generateError("Incorrect type for Group additional attributes"));
 	
@@ -240,6 +245,10 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		group.description=body["metadata"]["description"].GetString();
 	if(group.description.empty())
 		group.description=" "; //Dynamo will get upset if a string is empty
+	
+	if(body["metadata"].HasMember("unix_id")){
+		group.unixID=body["metadata"]["unix_id"].GetUint();
+	}
 	
 	if(body["metadata"].HasMember("additional_attributes")){
 		for(const auto& entry : body["metadata"]["additional_attributes"].GetObject()){
@@ -605,7 +614,7 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, std
 	message.subject="CI-Connect group deleted";
 	message.body="This is an automatic notification that "+user.name+
 	" ("+user.unixName+") has deleted the "+targetGroup.displayName+
-	" ("+targetGroup.name+") from the "+parentGroup.displayName+" group.";
+	" ("+targetGroup.name+") group from the "+parentGroup.displayName+" group.";
 	store.getEmailClient().sendEmail(message);
 	
 	return(crow::response(200));
