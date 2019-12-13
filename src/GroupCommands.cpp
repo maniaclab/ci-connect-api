@@ -313,7 +313,7 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		
 		//inform people of the request
 		EmailClient::Email message;
-		message.fromAddress="no-reply@ci-connect.net";
+		message.fromAddress="noreply@api.ci-connect.net";
 		message.toAddresses={parentGroup.email};
 		message.ccAddresses={user.email};
 		message.subject="CI-Connect group creation request";
@@ -603,7 +603,7 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, std
 	
 	//email parent group contact and all members of deleted group
 	EmailClient::Email message;
-	message.fromAddress="no-reply@ci-connect.net";
+	message.fromAddress="noreply@api.ci-connect.net";
 	message.toAddresses={parentGroup.email};
 	message.bccAddresses.reserve(memberships.size());
 	for(const auto& membership : memberships){
@@ -812,7 +812,7 @@ crow::response approveSubgroupRequest(PersistentStore& store, const crow::reques
 	User requestingUser=store.getUser(newGroupRequest.requester);
 	if(requestingUser){
 		EmailClient::Email message;
-		message.fromAddress="no-reply@ci-connect.net";
+		message.fromAddress="noreply@api.ci-connect.net";
 		message.toAddresses={requestingUser.email};
 		message.subject="CI-Connect group creation request approved";
 		message.body="This is an automatic notification that your request to create the group, "+
@@ -860,7 +860,7 @@ crow::response denySubgroupRequest(PersistentStore& store, const crow::request& 
 	User requestingUser=store.getUser(newGroupRequest.requester);
 	if(requestingUser){
 		EmailClient::Email mail;
-		mail.fromAddress="no-reply@ci-connect.net";
+		mail.fromAddress="noreply@api.ci-connect.net";
 		mail.toAddresses={requestingUser.email};
 		mail.subject="CI-Connect group creation request denied";
 		mail.body="This is an automatic notification that your request to create the group, "+

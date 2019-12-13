@@ -592,7 +592,7 @@ crow::response deleteUser(PersistentStore& store, const crow::request& req, cons
 	
 	//send email notification
 	EmailClient::Email message;
-	message.fromAddress="no-reply@ci-connect.net";
+	message.fromAddress="noreply@api.ci-connect.net";
 	message.toAddresses={targetUser.email};
 	message.subject="CI-Connect account deleted";
 	message.body="This is an automatic notification that your CI-Connect user "
@@ -849,7 +849,7 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 	//If the user is requesting to join a group, notify the group admins. 
 	if(currentStatus.state==GroupMembership::NonMember && membership.state==GroupMembership::Pending){
 		EmailClient::Email message;
-		message.fromAddress="no-reply@ci-connect.net";
+		message.fromAddress="noreply@api.ci-connect.net";
 		message.toAddresses={group.email};
 		message.ccAddresses={targetUser.email};
 		for(const auto& membership : store.getMembersOfGroup(group.name)){
@@ -867,7 +867,7 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 	}
 	else{ //otherwise just inform the user
 		EmailClient::Email message;
-		message.fromAddress="no-reply@ci-connect.net";
+		message.fromAddress="noreply@api.ci-connect.net";
 		message.toAddresses={targetUser.email};
 		message.subject="CI-Connect group membership change";
 		message.body="This is an automatic notification that your membership in the "+
@@ -931,7 +931,7 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 		
 	if(currentStatus.state==GroupMembership::Pending){
 		EmailClient::Email mail;
-		mail.fromAddress="no-reply@ci-connect.net";
+		mail.fromAddress="noreply@api.ci-connect.net";
 		mail.toAddresses={targetUser.email};
 		mail.subject="CI-Connect group membership request denied";
 		mail.body="This is an automatic notification that your request to join the "+
@@ -942,7 +942,7 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 	}
 	else{
 		EmailClient::Email mail;
-		mail.fromAddress="no-reply@ci-connect.net";
+		mail.fromAddress="noreply@api.ci-connect.net";
 		mail.toAddresses={targetUser.email};
 		mail.subject="CI-Connect group membership change";
 		mail.body="This is an automatic notification that your account has been removed from the "+
