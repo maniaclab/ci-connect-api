@@ -300,7 +300,7 @@ for GROUP in $SUBGROUPS; do
 	GID=$(jq -r '.groups | map(select(.name==("'"${BASE_GROUP_CONTEXT}${GROUP}"'"))) | map(.unix_id)[0]' subgroups.json)
 	if grep -q "^${GROUP}:" /etc/group; then
 		echo "Group $GROUP already exists"
-		ACTUAL_GROUP_ID=$(sed -n 's|t2admins:[^:]*:\([0-9]*\):.*|\1|p' < /etc/group)
+		ACTUAL_GROUP_ID=$(sed -n 's|^'"$GROUP"':[^:]*:\([0-9]*\):.*|\1|p' < /etc/group)
 		if [ "$ACTUAL_GROUP_ID" != "$GID" ]; then
 			echo "Warning: in-use gid for ${GROUP} (${ACTUAL_GROUP_ID}) does not match expected gid (${GID})"
 		fi
@@ -420,9 +420,9 @@ for USER in $USERS_TO_UPDATE; do
 		DEFAULT_GROUP=$(/usr/bin/env echo "$FILTERED_USER_GROUPS" | head -n 1)
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 	fi
-	ACTUAL_USER_ID=$(id -u "$USER_NAME")
+	ACTUAL_USER_ID=$(id -u "$USER")
 	if [ "$ACTUAL_USER_ID" != "$EXPECTED_USER_ID" ]; then
-		echo "Warning: in-use uid for ${USER_NAME} (${ACTUAL_USER_ID}) does not match expected uid (${EXPECTED_USER_ID})"
+		echo "Warning: in-use uid for ${USER} (${ACTUAL_USER_ID}) does not match expected uid (${EXPECTED_USER_ID})"
 	fi
 done
 
