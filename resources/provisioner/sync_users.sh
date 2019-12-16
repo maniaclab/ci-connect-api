@@ -1,5 +1,7 @@
 #!/bin/sh
 
+LOCK_DIR="sync_in_progress"
+
 HELP="Usage: sync_users.sh [OPTION]...
 
     -b path, --home-base path
@@ -85,6 +87,11 @@ if [ "$DRY_RUN" ]; then
 fi
 
 if [ "$DO_WIPE" ]; then
+	mkdir "$LOCK_DIR"
+	if [ "$?" -ne 0 ]; then
+		echo "Error: Failed to create new $LOCK_DIR lock directory; cowardly refusing to continue" 1>&2
+		exit 1
+	fi
 	echo "Warning: Erasing all provisioned users and groups in 5 seconds"
 	sleep 5
 	# erase users
@@ -117,6 +124,7 @@ if [ "$DO_WIPE" ]; then
 			fi
 		done
 	fi
+	rmdir "$LOCK_DIR"
 	exit
 fi
 
@@ -147,6 +155,16 @@ if [ -z "$HOME_DIR_ROOT" ]; then
 	echo "HOME_DIR_ROOT not set, using default value $HOME_DIR_ROOT"
 fi
 
+# Ensure that necessary commands are available
+ensure_available(){
+	if ! which "$1" >/dev/null 2>&1; then
+		echo "Error: Unable to find required command $1" 1>&2
+		exit 1
+	fi
+}
+ensure_available curl
+ensure_available jq
+
 if [ ! "$DRY_RUN" ]; then
 	# Ensure that the existing user/group lists exist
 	if [ ! -f existing_users ]; then
@@ -157,11 +175,22 @@ if [ ! "$DRY_RUN" ]; then
 	fi
 fi
 
+mkdir "$LOCK_DIR"
+if [ "$?" -ne 0 ]; then
+	echo "Error: Failed to create new $LOCK_DIR lock directory; cowardly refusing to continue" 1>&2
+	exit 1
+fi
+
 # Get all members of the group
-curl -s ${API_ENDPOINT}/v1alpha1/groups/${USER_SOURCE_GROUP}/members?token=${API_TOKEN} > group_members.json
+curl -sf ${API_ENDPOINT}/v1alpha1/groups/${USER_SOURCE_GROUP}/members?token=${API_TOKEN} > group_members.json
+if [ "$?" -ne 0 ]; then
+	echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/groups/${USER_SOURCE_GROUP}/members" 1>&2
+	rmdir "$LOCK_DIR"
+	exit 1
+fi
 ACTIVE_USERS=$(jq '.memberships | map(select(.state==("admin","active")) | .user_name)' group_members.json | sed -n 's|.*"\([^"]*\)".*|\1|p' | sort)
 DISABLED_USERS=$(jq '.memberships | map(select(.state==("disabled")) | .user_name)' group_members.json | sed -n 's|.*"\([^"]*\)".*|\1|p' | sort)
-N_ACTIVE=`echo "$ACTIVE_USERS" | wc -l`
+N_ACTIVE=$(/usr/bin/env echo "$ACTIVE_USERS" | wc -l)
 echo "$N_ACTIVE active group members"
 rm group_members.json
 
@@ -177,7 +206,7 @@ while [ "$PROCESSED" -lt "$N_ACTIVE" ]; do
 		TO_FETCH=$N_ACTIVE
 		BLOCK_SIZE=$(expr $N_ACTIVE - $PROCESSED)
 	fi
-	USER_BLOCK=$(echo "$ACTIVE_USERS" | head -n $TO_FETCH | tail -n $BLOCK_SIZE)
+	USER_BLOCK=$(/usr/bin/env echo "$ACTIVE_USERS" | head -n $TO_FETCH | tail -n $BLOCK_SIZE)
 	REQUEST='{'
 	SEP=""
 	for uname in $USER_BLOCK; do
@@ -185,8 +214,13 @@ while [ "$PROCESSED" -lt "$N_ACTIVE" ]; do
 		SEP=','
 	done
 	REQUEST="${REQUEST}"'}'
-	echo "$REQUEST" > user_request
-	curl -s -X POST --data '@user_request' ${API_ENDPOINT}/v1alpha1/multiplex?token=${API_TOKEN} > raw_user_data
+	/usr/bin/env echo "$REQUEST" > user_request
+	curl -sf -X POST --data '@user_request' ${API_ENDPOINT}/v1alpha1/multiplex?token=${API_TOKEN} > raw_user_data
+	if [ "$?" -ne 0 ]; then
+		echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/multiplex" 1>&2
+		rmdir "$LOCK_DIR"
+		exit 1
+	fi
 	jq '.[] | .body | fromjson | .metadata' raw_user_data | sed -e '/"institution"/d' \
 		-e '/"access_token"/d' \
 		-e '/"phone"/d' \
@@ -201,15 +235,20 @@ while [ "$PROCESSED" -lt "$N_ACTIVE" ]; do
 done
 
 # Figure out the last component of the base group name, e.g. root.foo -> foo
-BASE_GROUP_NAME=$(echo "$GROUP_ROOT_GROUP" | sed 's/.*\.\([^.]*\)$/\1/')
+BASE_GROUP_NAME=$(/usr/bin/env echo "$GROUP_ROOT_GROUP" | sed 's/.*\.\([^.]*\)$/\1/')
 # Figure out what, if anything, contains the base group, e.g. root.foo.bar -> root.foo
-BASE_GROUP_CONTEXT=$(echo "$GROUP_ROOT_GROUP" | sed -n 's/^\(.*\)\.[^.]*$/\1/p')
+BASE_GROUP_CONTEXT=$(/usr/bin/env echo "$GROUP_ROOT_GROUP" | sed -n 's/^\(.*\)\.[^.]*$/\1/p')
 if [ "$BASE_GROUP_CONTEXT" ]; then
 	# demand an explicit dot after a non-empty base
 	BASE_GROUP_CONTEXT="$BASE_GROUP_CONTEXT."
 fi
 # Get all subgroups
-curl -s ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}/subgroups?token=${API_TOKEN} > subgroups.json
+curl -sf ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}/subgroups?token=${API_TOKEN} > subgroups.json
+if [ "$?" -ne 0 ]; then
+	echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}/subgroups" 1>&2
+	rmdir "$LOCK_DIR"
+	exit 1
+fi
 SUBGROUPS=$(jq '.groups | map(.name)' subgroups.json | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p')
 
 # Delete all existing users which should not exist
@@ -241,12 +280,18 @@ done
 if grep -q "^${BASE_GROUP_NAME}:" /etc/group; then
 	echo "Group $BASE_GROUP_NAME already exists"
 else
-	GID=$(curl "${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}?token=${API_TOKEN}" | jq -r '.metadata.unix_id')
+	GID=$(curl -sf "${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}?token=${API_TOKEN}" | jq -r '.metadata.unix_id')
+	if [ "$?" -ne 0 ]; then
+		echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}" 1>&2
+		rmdir "$LOCK_DIR"
+		exit 1
+	fi
 	echo "Creating group $BASE_GROUP_NAME with gid $GID"
 	if [ ! "$DRY_RUN" ]; then
 		groupadd "$BASE_GROUP_NAME" -g $GID
 		if [ "$?" -ne 0 ]; then
 			echo "Aborting due to group creation error" 1>&2
+			rmdir "$LOCK_DIR"
 			exit 1
 		fi
 	fi
@@ -265,6 +310,7 @@ for GROUP in $SUBGROUPS; do
 			groupadd "$GROUP" -g $GID
 			if [ "$?" -ne 0 ]; then
 				echo "Aborting due to group creation error" 1>&2
+				rmdir "$LOCK_DIR"
 				exit 1
 			fi
 		fi
@@ -311,26 +357,32 @@ cat /dev/null > new_users
 for USER in $USERS_TO_CREATE; do
 	if [ -f user_data -a ! -s user_data ]; then
 		echo "user_data is empty!" 1>&2
+		rmdir "$LOCK_DIR"
 		exit 1
 	fi
 	USER_DATA=$(jq 'select(.unix_name==("'${USER}'"))' user_data)
-	if [ "$(echo "$USER_DATA" | jq '.service_account')" = "true" ]; then
+	if [ "$(/usr/bin/env echo "$USER_DATA" | jq '.service_account')" = "true" ]; then
 		echo "Skipping user $USER which is a service account"
 		continue
 	fi
-	USER_ID=$(echo "$USER_DATA" | jq -r '.unix_id')
-	USER_NAME=$(echo "$USER_DATA" | jq -r '.name')
-	USER_EMAIL=$(echo "$USER_DATA" | jq -r '.email')
-	RAW_USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
-	USER_GROUPS=$(echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
+	USER_ID=$(/usr/bin/env echo "$USER_DATA" | jq -r '.unix_id')
+	USER_NAME=$(/usr/bin/env echo "$USER_DATA" | jq -r '.name')
+	USER_EMAIL=$(/usr/bin/env echo "$USER_DATA" | jq -r '.email')
+	RAW_USER_GROUPS=$(/usr/bin/env echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
+	if [ "$?" -ne 0 ]; then
+		echo "Failed to extract group_memberships for user $USER" 1>&2
+		rmdir "$LOCK_DIR"
+		exit 1
+	fi
+	USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
 	echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS"
 	if [ ! "$DRY_RUN" ]; then
 		useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
-		set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(echo "$USER_DATA" | jq -r '.public_key')"
+		set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		# OSG specific: Try to pick out the first group to which the user belongs and set it as the default 'project'
 		# However, we must not pick 'osg', or any of the login node groups, so we remove these from the list.
-		FILTERED_USER_GROUPS=$(echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
-		DEFAULT_GROUP=$(echo "$FILTERED_USER_GROUPS" | head -n 1)
+		FILTERED_USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
+		DEFAULT_GROUP=$(/usr/bin/env echo "$FILTERED_USER_GROUPS" | head -n 1)
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 		echo "$USER" >> new_users
 	fi
@@ -340,6 +392,7 @@ if [ ! "$DRY_RUN" ]; then
 	mv existing_users.new existing_users
 	if [ "$?" -ne 0 ]; then
 		echo "Failed to replace existing_users file" 1>&2
+		rmdir "$LOCK_DIR"
 		exit 1
 	fi
 	rm new_users
@@ -348,23 +401,23 @@ fi
 # Ensure that previously existing users have updated information
 for USER in $USERS_TO_UPDATE; do
 	USER_DATA=$(jq 'select(.unix_name==("'${USER}'"))' user_data)
-	if [ $(echo "$USER_DATA" | jq '.service_account') = "true" ]; then
+	if [ $(/usr/bin/env echo "$USER_DATA" | jq '.service_account') = "true" ]; then
 		echo "Skipping $USER which is a service account"
 		continue
 	fi
-	EXPECTED_USER_ID=$(echo "$USER_DATA" | jq -r '.unix_id')
-	USER_NAME=$(echo "$USER_DATA" | jq -r '.name')
-	USER_EMAIL=$(echo "$USER_DATA" | jq -r '.email')
-	RAW_USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
-	USER_GROUPS=$(echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
+	EXPECTED_USER_ID=$(/usr/bin/env echo "$USER_DATA" | jq -r '.unix_id')
+	USER_NAME=$(/usr/bin/env echo "$USER_DATA" | jq -r '.name')
+	USER_EMAIL=$(/usr/bin/env echo "$USER_DATA" | jq -r '.email')
+	RAW_USER_GROUPS=$(/usr/bin/env echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
+	USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
 	echo "Updating user $USER with groups $USER_GROUPS"
 	if [ ! "$DRY_RUN" ]; then
 		usermod -G "$USER_GROUPS" "$USER"
-		set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(echo "$USER_DATA" | jq -r '.public_key')"
+		set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		# OSG specific: Try to pick out the first group to which the user belongs and set it as the default 'project'
 		# However, we must not pick 'osg', or any of the login node groups, so we remove these from the list.
-		FILTERED_USER_GROUPS=$(echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
-		DEFAULT_GROUP=$(echo "$FILTERED_USER_GROUPS" | head -n 1)
+		FILTERED_USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
+		DEFAULT_GROUP=$(/usr/bin/env echo "$FILTERED_USER_GROUPS" | head -n 1)
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 	fi
 	ACTUAL_USER_ID=$(id -u "$USER_NAME")
@@ -382,3 +435,5 @@ for USER in $DISABLED_USERS; do
 		fi
 	fi
 done
+
+rmdir "$LOCK_DIR"
