@@ -252,10 +252,14 @@ else
 	fi
 fi
 for GROUP in $SUBGROUPS; do
+	GID=$(jq -r '.groups | map(select(.name==("'"${BASE_GROUP_CONTEXT}${GROUP}"'"))) | map(.unix_id)[0]' subgroups.json)
 	if grep -q "^${GROUP}:" /etc/group; then
 		echo "Group $GROUP already exists"
+		ACTUAL_GROUP_ID=$(sed -n 's|t2admins:[^:]*:\([0-9]*\):.*|\1|p' < /etc/group)
+		if [ "$ACTUAL_GROUP_ID" != "$GID" ]; then
+			echo "Warning: in-use gid for ${GROUP} (${ACTUAL_GROUP_ID}) does not match expected gid (${GID})"
+		fi
 	else
-		GID=$(jq -r '.groups | map(select(.name==("'"${BASE_GROUP_CONTEXT}${GROUP}"'"))) | map(.unix_id)[0]' subgroups.json)
 		echo "Creating group $GROUP with gid $GID"
 		if [ ! "$DRY_RUN" ]; then
 			groupadd "$GROUP" -g $GID
@@ -348,6 +352,7 @@ for USER in $USERS_TO_UPDATE; do
 		echo "Skipping $USER which is a service account"
 		continue
 	fi
+	EXPECTED_USER_ID=$(echo "$USER_DATA" | jq -r '.unix_id')
 	USER_NAME=$(echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(echo "$USER_DATA" | jq -r '.email')
 	RAW_USER_GROUPS=$(echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
@@ -361,6 +366,10 @@ for USER in $USERS_TO_UPDATE; do
 		FILTERED_USER_GROUPS=$(echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
 		DEFAULT_GROUP=$(echo "$FILTERED_USER_GROUPS" | head -n 1)
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
+	fi
+	ACTUAL_USER_ID=$(id -u "$USER_NAME")
+	if [ "$ACTUAL_USER_ID" != "$EXPECTED_USER_ID" ]; then
+		echo "Warning: in-use uid for ${USER_NAME} (${ACTUAL_USER_ID}) does not match expected uid (${EXPECTED_USER_ID})"
 	fi
 done
 
