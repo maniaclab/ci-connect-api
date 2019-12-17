@@ -26,6 +26,8 @@ HELP="Usage: sync_users.sh [OPTION]...
         been copied elsewhere. 
     --dry-run
         Report changes which would be made, without actually making any. 
+    --clean-home
+        When deleting users, delete their home directories as well. 
 "
 
 # Read command line arguments
@@ -74,6 +76,8 @@ do
 		shift
 	elif [ "$arg" = "--wipe" ]; then
 		DO_WIPE=1
+	elif [ "$arg" = "--clean-home" ]; then
+		ERASE_HOME=1
 	elif [ "$arg" = "--dry-run" ]; then
 		DRY_RUN=1
 	else
@@ -84,6 +88,12 @@ done
 
 if [ "$DRY_RUN" ]; then
 	echo "Dry run; no changes will be made"
+fi
+
+USERDEL=userdel
+if [ "$ERASE_HOME" ]; then
+	USERDEL="userdel -r"
+	echo "Home directories of deleted users will be erased"
 fi
 
 if [ "$DO_WIPE" ]; then
@@ -99,7 +109,7 @@ if [ "$DO_WIPE" ]; then
 		for DEFUNCT_USER in $(cat existing_users); do
 			echo "Deleting user $DEFUNCT_USER"
 			if [ ! "$DRY_RUN" ]; then
-				userdel -r "$DEFUNCT_USER"
+				$USERDEL "$DEFUNCT_USER"
 				if [ "$?" -ne 0 ]; then
 					echo "Failed to delete user" 1>&2
 					exit 1
@@ -257,7 +267,7 @@ $DISABLED_USERS" | sort > all_users
 for DEFUNCT_USER in $(join -v1 existing_users all_users); do
 	echo "Deleting user $DEFUNCT_USER"
 	if [ ! "$DRY_RUN" ]; then
-		userdel -r "$DEFUNCT_USER"
+		$USERDEL "$DEFUNCT_USER"
 		sed '/^'"$DEFUNCT_USER"'$/d' existing_users > existing_users.new
 		mv existing_users.new existing_users
 	fi
