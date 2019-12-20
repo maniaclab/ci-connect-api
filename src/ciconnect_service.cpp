@@ -17,6 +17,8 @@
 #include "GroupCommands.h"
 #include "VersionCommands.h"
 
+#include "ThreadPool.h"
+
 struct Configuration{
 	struct ParamRef{
 		enum Type{String,Bool} type;
@@ -169,6 +171,10 @@ struct Configuration{
 	
 };
 
+///A thread pool for running multiplexed requests concurrently
+//TODO: this should probably not be hard-coded at 8 threads
+ThreadPool multipool(8);
+
 ///Accept a dictionary describing several individual requests, execute them all 
 ///concurrently, and return the results in another dictionary. Currently very
 ///simplistic; a new thread will be spawned for every individual request. 
@@ -232,7 +238,7 @@ crow::response multiplex(crow::SimpleApp& server, PersistentStore& store, const 
 	responses.reserve(requests.size());
 	
 	for(const auto& request : requests)
-		responses.emplace_back(std::async(std::launch::deferred,[&](){ 
+		responses.emplace_back(multipool.enqueue([&server,&request](){ 
 			crow::response response;
 			server.handle(request, response);
 			return response;
