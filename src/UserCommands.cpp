@@ -802,7 +802,7 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 	std::string enclosingGroupName=enclosingGroup(group.name);
 	if(enclosingGroupName!=group.name &&
 	   !store.userStatusInGroup(targetUser.unixName,enclosingGroupName).isMember())
-		return crow::response(400,generateError("Cannot modify user status in group: Target user is not a member of the enclosing group"));
+		return crow::response(400,generateError("Cannot modify user status in group: Target user ("+targetUser.name+") is not a member of the enclosing group ("+enclosingGroupName+")"));
 	
 	//Figure out whether the requested transition is allowed
 	switch(membership.state){

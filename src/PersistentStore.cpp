@@ -1056,7 +1056,29 @@ std::vector<User> PersistentStore::listUsers(){
 			if(item.count("next_unixID"))
 				log_fatal("Dynamo is stupid");
 			user.unixName=findOrThrow(item,"unixName","user record missing unixName attribute").GetS();
+			try{
 			user.name=findOrThrow(item,"name","user record missing name attribute").GetS();
+			}catch(std::exception& e){
+				std::cout << "user " << user.unixName << " missing name" << std::endl;
+				for(const auto& entry : item){
+					std::cout << " attribute: " << entry.first << " -> ";
+					switch(entry.second.GetType()){
+						case Aws::DynamoDB::Model::ValueType::STRING:
+							std::cout << "[string]\"" << entry.second.GetS() << "\"\n";
+							break;
+						case Aws::DynamoDB::Model::ValueType::NUMBER:
+							std::cout << "[number]" << entry.second.GetN() << '\n';
+							break;
+						case Aws::DynamoDB::Model::ValueType::BOOL:
+							std::cout << "[bool]" << (entry.second.GetBool()?"true":"false") << '\n';
+							break;
+						default:
+							std::cout << "[something else]\n";
+							break;
+					}
+				}
+				continue;
+			}
 			user.email=findOrThrow(item,"email","user record missing email attribute").GetS();
 			user.phone=findOrDefault(item,"phone",missingString).GetS();
 			user.institution=findOrDefault(item,"institution",missingString).GetS();
@@ -1690,10 +1712,34 @@ std::vector<Group> PersistentStore::listGroups(){
 			keepGoing=false;
 		//collect results from this page
 		for(const auto& item : result.GetItems()){
+			
+		
 			Group group;
 			group.valid=true;
 			group.name=findOrThrow(item,"name","Group record missing name attribute").GetS();
+			try{
 			group.displayName=findOrThrow(item,"displayName","Group record missing displayName attribute").GetS();
+			}catch(std::exception& e){
+				std::cout << "Group " << group.name << " missing displayName" << std::endl;
+				for(const auto& entry : item){
+					std::cout << " attribute: " << entry.first << " -> ";
+					switch(entry.second.GetType()){
+						case Aws::DynamoDB::Model::ValueType::STRING:
+							std::cout << "[string]\"" << entry.second.GetS() << "\"\n";
+							break;
+						case Aws::DynamoDB::Model::ValueType::NUMBER:
+							std::cout << "[number]" << entry.second.GetN() << '\n';
+							break;
+						case Aws::DynamoDB::Model::ValueType::BOOL:
+							std::cout << "[bool]" << (entry.second.GetBool()?"true":"false") << '\n';
+							break;
+						default:
+							std::cout << "[something else]\n";
+							break;
+					}
+				}
+				continue;
+			}
 			group.email=findOrThrow(item,"email","Group record missing email attribute").GetS();
 			group.phone=findOrThrow(item,"phone","Group record missing phone attribute").GetS();
 			group.purpose=findOrThrow(item,"purpose","Group record missing purpose attribute").GetS();
