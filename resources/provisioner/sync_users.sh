@@ -388,6 +388,19 @@ for USER in $USERS_TO_CREATE; do
 	echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS"
 	if [ ! "$DRY_RUN" ]; then
 		useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+		if [ "$?" -ne 0 ]; then
+			echo "Failed to create user $USER" 1>&2
+			cat existing_users new_users | sort | uniq > existing_users.new
+			mv existing_users.new existing_users
+			if [ "$?" -ne 0 ]; then
+				echo "Failed to replace existing_users file" 1>&2
+				rmdir "$LOCK_DIR"
+				exit 1
+			fi
+			rm new_users
+			rmdir "$LOCK_DIR"
+			exit 1
+		fi
 		set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		# OSG specific: Try to pick out the first group to which the user belongs and set it as the default 'project'
 		# However, we must not pick 'osg', or any of the login node groups, so we remove these from the list.
