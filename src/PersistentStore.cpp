@@ -1056,9 +1056,9 @@ std::vector<User> PersistentStore::listUsers(){
 			if(item.count("next_unixID"))
 				log_fatal("Dynamo is stupid");
 			user.unixName=findOrThrow(item,"unixName","user record missing unixName attribute").GetS();
-			try{
+			//try{
 			user.name=findOrThrow(item,"name","user record missing name attribute").GetS();
-			}catch(std::exception& e){
+			/*}catch(std::exception& e){
 				std::cout << "user " << user.unixName << " missing name" << std::endl;
 				for(const auto& entry : item){
 					std::cout << " attribute: " << entry.first << " -> ";
@@ -1078,7 +1078,7 @@ std::vector<User> PersistentStore::listUsers(){
 					}
 				}
 				continue;
-			}
+			}*/
 			user.email=findOrThrow(item,"email","user record missing email attribute").GetS();
 			user.phone=findOrDefault(item,"phone",missingString).GetS();
 			user.institution=findOrDefault(item,"institution",missingString).GetS();
