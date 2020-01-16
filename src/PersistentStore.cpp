@@ -1717,9 +1717,9 @@ std::vector<Group> PersistentStore::listGroups(){
 			Group group;
 			group.valid=true;
 			group.name=findOrThrow(item,"name","Group record missing name attribute").GetS();
-			try{
+			//try{
 			group.displayName=findOrThrow(item,"displayName","Group record missing displayName attribute").GetS();
-			}catch(std::exception& e){
+			/*}catch(std::exception& e){
 				std::cout << "Group " << group.name << " missing displayName" << std::endl;
 				for(const auto& entry : item){
 					std::cout << " attribute: " << entry.first << " -> ";
@@ -1739,7 +1739,7 @@ std::vector<Group> PersistentStore::listGroups(){
 					}
 				}
 				continue;
-			}
+			}*/
 			group.email=findOrThrow(item,"email","Group record missing email attribute").GetS();
 			group.phone=findOrThrow(item,"phone","Group record missing phone attribute").GetS();
 			group.purpose=findOrThrow(item,"purpose","Group record missing purpose attribute").GetS();
