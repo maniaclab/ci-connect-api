@@ -855,7 +855,7 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 		for(const auto& membership : store.getMembersOfGroup(group.name)){
 			if(membership.state==GroupMembership::Admin){
 				User admin=store.getUser(membership.userName);
-				message.toAddresses.push_back(admin.email);
+				message.bccAddresses.push_back(admin.email);
 			}
 		}
 		message.subject="CI-Connect group membership request";
