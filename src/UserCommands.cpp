@@ -352,8 +352,26 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 		targetUser.sshKey=" "; //dummy data to keep dynamo happy
 	targetUser.unixName=body["metadata"]["unix_name"].GetString();
 	if(targetUser.unixName.empty()){
-		log_warn("User unixName was emtpy");
+		log_warn("User unixName was empty");
 		return crow::response(400,generateError("Empty user unix account name"));
+	}
+	{
+		//theoretical regex: ^[a-zA-Z0-9._][-a-zA-Z0-9._]*$
+		const static std::string allowedFirstCharacters=
+		"abcdefghijklmnopqrstuvwxyz"
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		"0123456789._";
+		const static std::string allowedRemainingCharacters=allowedFirstCharacters+"-";
+		//unixName is known to have at least one character
+		if(allowedFirstCharacters.find(targetUser.unixName[0])==std::string::npos){
+			log_warn("User unixName began with forbidden character " << targetUser.unixName[0]);
+			return crow::response(400,generateError("Invalid first character in user unix account name"));
+		}
+		std::size_t pos;
+		if((pos=targetUser.unixName.find_first_not_of(allowedRemainingCharacters,1))!=std::string::npos){
+			log_warn("User unixName contained forbidden character " << targetUser.unixName[pos]);
+			return crow::response(400,generateError("Invalid character in user unix account name"));
+		}
 	}
 	targetUser.superuser=body["metadata"]["superuser"].GetBool();
 	targetUser.serviceAccount=body["metadata"]["service_account"].GetBool();
