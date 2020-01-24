@@ -175,6 +175,8 @@ bool EmailClient::sendEmail(const Email& email){
 		data.emplace("cc",cc);
 	for(const auto& bcc : email.bccAddresses)
 		data.emplace("bcc",bcc);
+	if(!email.replyTo.empty())
+		data.emplace("h:Reply-To",email.replyTo);
 	auto response=httpRequests::httpPostForm(url,data);
 	if(response.status!=200){
 		log_warn("Failed to send email: " << response.body);

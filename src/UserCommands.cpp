@@ -866,22 +866,37 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 	
 	//If the user is requesting to join a group, notify the group admins. 
 	if(currentStatus.state==GroupMembership::NonMember && membership.state==GroupMembership::Pending){
-		EmailClient::Email message;
-		message.fromAddress="noreply@api.ci-connect.net";
-		message.toAddresses={group.email};
-		message.ccAddresses={targetUser.email};
+		EmailClient::Email adminMessage;
+		adminMessage.fromAddress="noreply@api.ci-connect.net";
+		adminMessage.toAddresses={group.email};
+		adminMessage.replyTo=targetUser.email;
 		for(const auto& membership : store.getMembersOfGroup(group.name)){
 			if(membership.state==GroupMembership::Admin){
 				User admin=store.getUser(membership.userName);
-				message.bccAddresses.push_back(admin.email);
+				adminMessage.bccAddresses.push_back(admin.email);
 			}
 		}
-		message.subject="CI-Connect group membership request";
-		message.body="This is an automatic notification that "+targetUser.name+
+		adminMessage.subject="CI-Connect group membership request";
+		adminMessage.body="This is an automatic notification that "+targetUser.name+
 		" ("+targetUser.unixName+") has requested to join the "+group.displayName+" group.";
 		if(!comment.empty())
-			message.body+="\n\nComment from "+targetUser.name+":\n"+comment;
-		store.getEmailClient().sendEmail(message);
+			adminMessage.body+="\n\nComment from "+targetUser.name+":\n"+comment;
+		store.getEmailClient().sendEmail(adminMessage);
+		
+		//Figure out whether to send a notification directly to the user. If the 
+		//group address is on the freshdesk.com domain, we assume that FreshDesk
+		//will send a notification email to the user on its own, so we should
+		//not send one directly. 
+		if(group.email.find("freshdesk.com")==std::string::npos){
+			EmailClient::Email userMessage;
+			userMessage.subject=adminMessage.subject;
+			userMessage.fromAddress="noreply@api.ci-connect.net";
+			userMessage.toAddresses={targetUser.email};
+			userMessage.replyTo=group.email;
+			userMessage.body="This is an automatic notification that your request to join the "
+							 +group.displayName+" group is being processed.";
+			store.getEmailClient().sendEmail(userMessage);
+		}
 	}
 	else{ //otherwise just inform the user
 		EmailClient::Email message;

@@ -117,6 +117,7 @@ public:
 		std::vector<std::string> toAddresses;
 		std::vector<std::string> ccAddresses;
 		std::vector<std::string> bccAddresses;
+		std::string replyTo;
 		std::string subject;
 		std::string body;
 	};
