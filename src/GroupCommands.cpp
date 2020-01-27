@@ -312,15 +312,31 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		log_info("Created " << gr << " on behalf of " << user);
 		
 		//inform people of the request
-		EmailClient::Email message;
-		message.fromAddress="noreply@api.ci-connect.net";
-		message.toAddresses={parentGroup.email};
-		message.ccAddresses={user.email};
-		message.subject="CI-Connect group creation request";
-		message.body="This is an automatic notification that "+user.name+
+		EmailClient::Email adminMessage;
+		adminMessage.fromAddress="noreply@api.ci-connect.net";
+		adminMessage.toAddresses={parentGroup.email};
+		for(const auto& membership : store.getMembersOfGroup(parentGroup.name)){
+			if(membership.state==GroupMembership::Admin){
+				User admin=store.getUser(membership.userName);
+				adminMessage.toAddresses.push_back(admin.email);
+			}
+		}
+		adminMessage.replyTo=user.email;
+		adminMessage.subject="CI-Connect group creation request";
+		adminMessage.body="This is an automatic notification that "+user.name+
 		" ("+user.unixName+") has requested to create a subgroup, "+gr.displayName+
 		" ("+gr.name+") within the "+parentGroup.displayName+" group.";
-		store.getEmailClient().sendEmail(message);
+		store.getEmailClient().sendEmail(adminMessage);
+		
+		EmailClient::Email userMessage;
+		userMessage.subject=adminMessage.subject;
+		userMessage.fromAddress="noreply@api.ci-connect.net";
+		userMessage.toAddresses={user.email};
+		userMessage.replyTo=group.email;
+		userMessage.body="This is an automatic notification that your request to create a subgroup "
+						 +gr.displayName+" ("+gr.name+") within the "+parentGroup.displayName
+						 +" group is being processed.";
+		store.getEmailClient().sendEmail(userMessage);
 	}
 	
 	return crow::response(200);
