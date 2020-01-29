@@ -151,8 +151,10 @@ public:
 	                std::string bootstrapUserFile, EmailClient emailClient);
 	
 	///Store a record for a new user
+	///\param user the user to create. If the user does not have a unix ID number, 
+	///            one will be assigned
 	///\return Whether the user record was successfully added to the database
-	bool addUser(const User& user);
+	bool addUser(User& user);
 	
 	///Find information about the user with a given ID
 	///\param id the users ID
@@ -230,10 +232,11 @@ public:
 	//----
 	
 	///Create a record for a new group
-	///\param group the new group
+	///\param group the group to create. If the group does not have a unix ID number, 
+	///             one will be assigned
 	///\pre the new group must have a unique ID and name
 	///\return whether the addition operation was successful
-	bool addGroup(const Group& group);
+	bool addGroup(Group& group);
 	
 	///Create a record for a group creation request
 	///\param group the new group

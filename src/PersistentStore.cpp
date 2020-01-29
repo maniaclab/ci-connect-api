@@ -709,16 +709,14 @@ std::string recordName, unsigned int targetID){
 	}
 }
 
-bool PersistentStore::addUser(const User& user){
-	unsigned int userID=0;
+bool PersistentStore::addUser(User& user){
 	if(user.unixID!=0){
-		userID=user.unixID;
-		bool reserved=allocateSpecificUnixID(userTableName,"unixName",minimumUserID,maximumUserID,user.unixName,userID);
+		bool reserved=allocateSpecificUnixID(userTableName,"unixName",minimumUserID,maximumUserID,user.unixName,user.unixID);
 		if(!reserved)
-			log_fatal("Existing user ID (" << userID << ") is already in use");
+			log_fatal("Existing user ID (" << user.unixID << ") is already in use");
 	}
 	else
-		userID=allocateUnixID(userTableName,"unixName",minimumUserID,maximumUserID,user.unixName);
+		user.unixID=allocateUnixID(userTableName,"unixName",minimumUserID,maximumUserID,user.unixName);
 
 	using Aws::DynamoDB::Model::AttributeValue;
 	auto request=Aws::DynamoDB::Model::PutItemRequest()
@@ -737,7 +735,7 @@ bool PersistentStore::addUser(const User& user){
 		{"lastUseTime",AttributeValue(user.lastUseTime)},
 		{"superuser",AttributeValue().SetBool(user.superuser)},
 		{"serviceAccount",AttributeValue().SetBool(user.serviceAccount)},
-		{"unixID",AttributeValue().SetN(std::to_string(userID))}
+		{"unixID",AttributeValue().SetN(std::to_string(user.unixID))}
 	});
 	auto outcome=dbClient.PutItem(request);
 	if(!outcome.IsSuccess()){
@@ -1396,7 +1394,7 @@ std::vector<GroupMembership> PersistentStore::getUserGroupMemberships(const std:
 
 //----
 
-bool PersistentStore::addGroup(const Group& group){
+bool PersistentStore::addGroup(Group& group){
 	if(group.email.empty())
 		throw std::runtime_error("Group email must not be empty because Dynamo");
 	if(group.phone.empty())
@@ -1408,14 +1406,13 @@ bool PersistentStore::addGroup(const Group& group){
 	
 	unsigned int groupID=0;
 	if(group.unixID!=0){
-		groupID=group.unixID;
-		log_info("allocating group with ID " << groupID);
-		bool reserved=allocateSpecificUnixID(groupTableName, "name", minimumGroupID, maximumGroupID, group.name, groupID);
+		log_info("allocating group with ID " << group.unixID);
+		bool reserved=allocateSpecificUnixID(groupTableName, "name", minimumGroupID, maximumGroupID, group.name, group.unixID);
 		if(!reserved)
-			log_fatal("Existing group ID (" << groupID << ") is already in use");
+			log_fatal("Existing group ID (" << group.unixID << ") is already in use");
 	}
 	else
-		groupID=allocateUnixID(groupTableName, "name", minimumGroupID, maximumGroupID, group.name);
+		group.unixID=allocateUnixID(groupTableName, "name", minimumGroupID, maximumGroupID, group.name);
 		
 	using AV=Aws::DynamoDB::Model::AttributeValue;
 	auto outcome=dbClient.PutItem(Aws::DynamoDB::Model::PutItemRequest()
@@ -1428,7 +1425,7 @@ bool PersistentStore::addGroup(const Group& group){
 	                                         {"purpose",AV(group.purpose)},
 	                                         {"description",AV(group.description)},
 	                                         {"creationDate",AV(group.creationDate)},
-	                                         {"unixID",AV().SetN(std::to_string(groupID))}
+	                                         {"unixID",AV().SetN(std::to_string(group.unixID))}
 	                              }));
 	if(!outcome.IsSuccess()){
 		auto err=outcome.GetError();
