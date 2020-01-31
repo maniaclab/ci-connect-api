@@ -449,9 +449,10 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 	log_info(user << " requested information about " << uID);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
-	//users can only be examined by admins or themselves
-	if(!user.superuser && user.unixName!=uID)
-		return crow::response(403,generateError("Not authorized"));
+	//For now, allow all users to query all other users' data
+	////users can only be examined by admins or themselves
+	//if(!user.superuser && user.unixName!=uID)
+	//	return crow::response(403,generateError("Not authorized"));
 	
 	User targetUser=store.getUser(uID);
 	if(!targetUser)
