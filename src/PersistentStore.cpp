@@ -1440,7 +1440,7 @@ bool PersistentStore::addGroup(Group& group){
 	return true;
 }
 
-bool PersistentStore::addGroupRequest(const GroupRequest& gr){
+bool PersistentStore::addGroupRequest(GroupRequest& gr){
 	if(gr.email.empty())
 		throw std::runtime_error("Group email must not be empty because Dynamo");
 	if(gr.phone.empty())
@@ -1450,6 +1450,8 @@ bool PersistentStore::addGroupRequest(const GroupRequest& gr){
 	if(gr.description.empty())
 		throw std::runtime_error("Group description must not be empty because Dynamo");
 	using AV=Aws::DynamoDB::Model::AttributeValue;
+	
+	gr.unixID=allocateUnixID(groupTableName, "name", minimumGroupID, maximumGroupID, gr.name);
 	
 	AV secondary;
 	secondary.AddMEntry("dummy",std::make_shared<AV>("dummy"));
@@ -1466,6 +1468,7 @@ bool PersistentStore::addGroupRequest(const GroupRequest& gr){
 	                                         {"purpose",AV(gr.purpose)},
 	                                         {"description",AV(gr.description)},
 	                                         {"requester",AV(gr.requester)},
+	                                         {"unixID",AV().SetN(std::to_string(gr.unixID))},
 	                                         {"secondaryAttributes",secondary}
 	                              }));
 	if(!outcome.IsSuccess()){
@@ -1804,6 +1807,7 @@ std::vector<GroupRequest> PersistentStore::listGroupRequests(){
 			gr.purpose=findOrThrow(item,"purpose","Group request record missing purpose attribute").GetS();
 			gr.description=findOrThrow(item,"description","Group request record missing description attribute").GetS();
 			gr.requester=findOrThrow(item,"requester","Group request record missing requester attribute").GetS();
+			gr.unixID=std::stoul(findOrThrow(item,"unixID","Group request record missing unixID attribute").GetN());
 			auto extra=findOrThrow(item,"secondaryAttributes","Group Request record missing secondary attributes").GetM();
 			for(const auto& attr : extra){
 				if(attr.first=="dummy")
@@ -1895,8 +1899,8 @@ Group PersistentStore::getGroup(const std::string& groupName){
 		group.pending=true;
 	else{ //only fully created groups have these properties
 		group.creationDate=findOrThrow(item,"creationDate","Group record missing creation date attribute").GetS();
-		group.unixID=std::stoul(findOrThrow(item,"unixID","Group record missing unixID attribute").GetN());
 	}
+	group.unixID=std::stoul(findOrThrow(item,"unixID","Group record missing unixID attribute").GetN());
 	
 	//update caches
 	CacheRecord<Group> record(group,groupCacheValidity);
@@ -1942,6 +1946,7 @@ GroupRequest PersistentStore::getGroupRequest(const std::string& groupName){
 	gr.purpose=findOrThrow(item,"purpose","Group Request record missing purpose attribute").GetS();
 	gr.description=findOrThrow(item,"description","Group Request record missing description attribute").GetS();
 	gr.requester=findOrThrow(item,"requester","Group Request record missing requester attribute").GetS();
+	gr.unixID=std::stoul(findOrThrow(item,"unixID","Group Request record missing unixID attribute").GetN());
 	
 	auto extra=findOrThrow(item,"secondaryAttributes","Group Request record missing secondary attributes").GetM();
 	for(const auto& attr : extra){
@@ -1965,8 +1970,6 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 		return false;
 	}
 	
-	unsigned int groupID=allocateUnixID(groupTableName, "name", minimumGroupID, maximumGroupID, groupName);
-	
 	std::string creationDate=timestamp();
 	using AV=Aws::DynamoDB::Model::AttributeValue;
 	using AVU=Aws::DynamoDB::Model::AttributeValueUpdate;
@@ -1978,7 +1981,6 @@ bool PersistentStore::approveGroupRequest(const std::string& groupName){
 	                                            {"requester",AVU().WithAction(Aws::DynamoDB::Model::AttributeAction::DELETE_)},
 	                                            {"secondaryAttributes",AVU().WithAction(Aws::DynamoDB::Model::AttributeAction::DELETE_)},
 	                                            {"creationDate",AVU().WithValue(AV(creationDate))},
-	                                            {"unixID",AVU().WithValue(AV().SetN(std::to_string(groupID)))}
 	                                            })
 	                                 );
 	if(!outcome.IsSuccess()){

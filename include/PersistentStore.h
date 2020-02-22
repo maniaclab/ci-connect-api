@@ -239,10 +239,10 @@ public:
 	bool addGroup(Group& group);
 	
 	///Create a record for a group creation request
-	///\param group the new group
+	///\param gr the new group being requested. A unix ID number will be assigned to it. 
 	///\pre the new group must have a unique ID and name
 	///\return whether the addition operation was successful
-	bool addGroupRequest(const GroupRequest& gr);
+	bool addGroupRequest(GroupRequest& gr);
 	
 	///Delete a group record
 	///\param groupID the ID of the group to delete

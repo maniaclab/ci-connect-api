@@ -91,6 +91,7 @@ struct GroupRequest{
 	std::string purpose;
 	std::string description;
 	std::string requester;
+	unsigned int unixID;
 	std::map<std::string,std::string> secondaryAttributes;
 	
 	explicit operator bool() const{ return valid; }
