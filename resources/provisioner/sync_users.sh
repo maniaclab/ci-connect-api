@@ -341,8 +341,9 @@ set_ssh_authorized_keys(){
 	if [ ! -d "$USER_HOME_DIR/.ssh" ]; then
 		mkdir "$USER_HOME_DIR/.ssh"
 	fi
-	echo "$USER_KEY_DATA" > "$USER_HOME_DIR/.ssh/authorized_keys"
+	echo "$USER_KEY_DATA" > "$USER_HOME_DIR/.ssh/authorized_keys.new"
 	chown -R "$USER" "$USER_HOME_DIR/.ssh"
+	mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
 	chmod 0600 "$USER_HOME_DIR/.ssh/authorized_keys"
 }
 
