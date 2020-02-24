@@ -342,7 +342,7 @@ set_ssh_authorized_keys(){
 		mkdir "$USER_HOME_DIR/.ssh"
 	fi
 	echo "$USER_KEY_DATA" > "$USER_HOME_DIR/.ssh/authorized_keys.new"
-	chown -R "$USER" "$USER_HOME_DIR/.ssh"
+	chown -R "$USER": "$USER_HOME_DIR/.ssh"
 	mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
 	chmod 0600 "$USER_HOME_DIR/.ssh/authorized_keys"
 }
@@ -360,7 +360,7 @@ set_default_project(){
 		mkdir "$USER_HOME_DIR/.ciconnect"
 	fi
 	echo "$USER_PROJECT" > "$USER_HOME_DIR/.ciconnect/defaultproject"
-	chown -R "$USER" "$USER_HOME_DIR/.ciconnect"
+	chown -R "$USER": "$USER_HOME_DIR/.ciconnect"
 }
 
 # Ensure that all active users have accounts
