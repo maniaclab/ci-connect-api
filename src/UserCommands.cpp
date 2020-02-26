@@ -471,7 +471,10 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 	metadata.AddMember("phone", targetUser.phone, alloc);
 	metadata.AddMember("institution", targetUser.institution, alloc);
 	metadata.AddMember("access_token", targetUser.token, alloc);
-	metadata.AddMember("public_key", targetUser.sshKey, alloc);
+	if(targetUser.sshKey!=" ")
+		metadata.AddMember("public_key", targetUser.sshKey, alloc);
+	else
+		metadata.AddMember("public_key", "", alloc);
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
 	metadata.AddMember("unix_id", targetUser.unixID, alloc);
 	metadata.AddMember("join_date", targetUser.joinDate, alloc);
