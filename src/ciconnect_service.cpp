@@ -183,7 +183,7 @@ crow::response multiplex(crow::SimpleApp& server, PersistentStore& store, const 
 	high_resolution_clock::time_point t1 = high_resolution_clock::now();
 	
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested execute a command bundle");
+	log_info(user << " requested execute a command bundle from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	

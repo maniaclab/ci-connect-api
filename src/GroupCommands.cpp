@@ -84,7 +84,7 @@ std::string enclosingGroup(const std::string& groupName){
 
 crow::response listGroups(PersistentStore& store, const crow::request& req){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to list groups");
+	log_info(user << " requested to list groups from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//All users are allowed to list groups
@@ -123,7 +123,7 @@ crow::response listGroups(PersistentStore& store, const crow::request& req){
 crow::response createGroup(PersistentStore& store, const crow::request& req, 
                            std::string parentGroupName, std::string newGroupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to create group " << newGroupName << " within " << parentGroupName);
+	log_info(user << " requested to create group " << newGroupName << " within " << parentGroupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	parentGroupName=canonicalizeGroupName(parentGroupName);
@@ -344,7 +344,7 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 
 crow::response getGroupInfo(PersistentStore& store, const crow::request& req, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested information about " << groupName);
+	log_info(user << " requested information about " << groupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//Any user in the system may query a Group's information
@@ -377,7 +377,7 @@ crow::response getGroupInfo(PersistentStore& store, const crow::request& req, st
 
 crow::response updateGroup(PersistentStore& store, const crow::request& req, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to update " << groupName);
+	log_info(user << " requested to update " << groupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -461,6 +461,7 @@ crow::response updateGroup(PersistentStore& store, const crow::request& req, std
 
 crow::response updateGroupRequest(PersistentStore& store, const crow::request& req, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
+	log_info(user << " requested to update information for " << groupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -593,7 +594,7 @@ crow::response updateGroupRequest(PersistentStore& store, const crow::request& r
 
 crow::response deleteGroup(PersistentStore& store, const crow::request& req, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to delete " << groupName);
+	log_info(user << " requested to delete " << groupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	groupName=canonicalizeGroupName(groupName);
@@ -638,7 +639,7 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, std
 
 crow::response listGroupMembers(PersistentStore& store, const crow::request& req, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to list members of " << groupName);
+	log_info(user << " requested to list members of " << groupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -671,7 +672,7 @@ crow::response listGroupMembers(PersistentStore& store, const crow::request& req
 
 crow::response getGroupMemberStatus(PersistentStore& store, const crow::request& req, const std::string& userID, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to get membership status of " << userID << " in " << groupName);
+	log_info(user << " requested to get membership status of " << userID << " in " << groupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -693,7 +694,7 @@ crow::response getGroupMemberStatus(PersistentStore& store, const crow::request&
 
 crow::response getSubgroups(PersistentStore& store, const crow::request& req, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to get subgroups of " << groupName);
+	log_info(user << " requested to get subgroups of " << groupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -731,7 +732,7 @@ crow::response getSubgroups(PersistentStore& store, const crow::request& req, st
 
 crow::response getSubgroupRequests(PersistentStore& store, const crow::request& req, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to get subgroups of " << groupName);
+	log_info(user << " requested to get subgroups of " << groupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -772,7 +773,7 @@ crow::response getSubgroupRequests(PersistentStore& store, const crow::request& 
 
 crow::response approveSubgroupRequest(PersistentStore& store, const crow::request& req, std::string parentGroupName, std::string newGroupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to approve creation of the " << newGroupName << " subgroup of " << parentGroupName);
+	log_info(user << " requested to approve creation of the " << newGroupName << " subgroup of " << parentGroupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 		
@@ -842,7 +843,7 @@ crow::response approveSubgroupRequest(PersistentStore& store, const crow::reques
 
 crow::response denySubgroupRequest(PersistentStore& store, const crow::request& req, std::string parentGroupName, std::string newGroupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to deny creation of the " << newGroupName << " subgroup of " << parentGroupName);
+	log_info(user << " requested to deny creation of the " << newGroupName << " subgroup of " << parentGroupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 		
@@ -892,7 +893,7 @@ crow::response denySubgroupRequest(PersistentStore& store, const crow::request& 
 
 crow::response getGroupAttribute(PersistentStore& store, const crow::request& req, std::string groupName, std::string attributeName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to fetch secondary attribute " << attributeName << " of group " << groupName);
+	log_info(user << " requested to fetch secondary attribute " << attributeName << " of group " << groupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -914,7 +915,7 @@ crow::response getGroupAttribute(PersistentStore& store, const crow::request& re
 
 crow::response setGroupAttribute(PersistentStore& store, const crow::request& req, std::string groupName, std::string attributeName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to set secondary attribute " << attributeName << " for group " << groupName);
+	log_info(user << " requested to set secondary attribute " << attributeName << " for group " << groupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 		
@@ -948,7 +949,7 @@ crow::response setGroupAttribute(PersistentStore& store, const crow::request& re
 
 crow::response deleteGroupAttribute(PersistentStore& store, const crow::request& req, std::string groupName, std::string attributeName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to delete secondary attribute " << attributeName << " from group " << groupName);
+	log_info(user << " requested to delete secondary attribute " << attributeName << " from group " << groupName << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	

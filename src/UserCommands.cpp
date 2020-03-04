@@ -6,7 +6,7 @@
 
 crow::response listUsers(PersistentStore& store, const crow::request& req){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to list users");
+	log_info(user << " requested to list users from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//TODO: Are all users are allowed to list all users?
@@ -206,7 +206,7 @@ bool validateSSHKeys(const std::string& keyData){
 crow::response createUser(PersistentStore& store, const crow::request& req){
 	//important: user is the user issuing the command, not the user being modified
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to create a user");
+	log_info(user << " requested to create a user from " << req.remote_endpoint);
 	if(!user){
 		log_warn(user << " is not authorized to create users");
 		return crow::response(403,generateError("Not authorized"));
@@ -446,7 +446,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 crow::response getUserInfo(PersistentStore& store, const crow::request& req, const std::string uID){
 	//important: user is the user issuing the command, not the user being modified
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested information about " << uID);
+	//log_info(user << " requested information about " << uID << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//For now, allow all users to query all other users' data
@@ -503,7 +503,7 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 crow::response updateUser(PersistentStore& store, const crow::request& req, const std::string uID){
 	//important: user is the user issuing the command, not the user being modified
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to update information about " << uID);
+	log_info(user << " requested to update information about " << uID << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//users can only be altered by admins and themselves
@@ -586,7 +586,7 @@ crow::response updateUser(PersistentStore& store, const crow::request& req, cons
 
 crow::response deleteUser(PersistentStore& store, const crow::request& req, const std::string uID){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " to delete " << uID);
+	log_info(user << " to delete " << uID << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//users can only be deleted by admins or themselves
@@ -629,7 +629,7 @@ crow::response deleteUser(PersistentStore& store, const crow::request& req, cons
 
 crow::response listUserGroups(PersistentStore& store, const crow::request& req, const std::string uID){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested Group listing for " << uID);
+	log_info(user << " requested Group listing for " << uID << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -665,7 +665,7 @@ crow::response listUserGroups(PersistentStore& store, const crow::request& req, 
 
 crow::response listUserGroupRequests(PersistentStore& store, const crow::request& req, const std::string uID){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to get group requests by " << uID);
+	log_info(user << " requested to get group requests by " << uID << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -755,7 +755,7 @@ namespace{
 crow::response setUserStatusInGroup(PersistentStore& store, const crow::request& req, 
 						   const std::string& uID, std::string groupName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to add " << uID << " to " << groupName);
+	log_info(user << " requested to add " << uID << " to " << groupName << " from " << req.remote_endpoint);
 	if(!user){
 		log_warn(user << " does not exist");
 		return crow::response(403,generateError("Not authorized"));
@@ -918,7 +918,7 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 crow::response removeUserFromGroup(PersistentStore& store, const crow::request& req, 
 								   const std::string& uID, std::string groupID){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to remove " << uID << " from " << groupID);
+	log_info(user << " requested to remove " << uID << " from " << groupID << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -995,7 +995,7 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 crow::response getUserAttribute(PersistentStore& store, const crow::request& req, 
                                 std::string uID, std::string attributeName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to fetch secondary attribute " << attributeName << " of user " << uID);
+	log_info(user << " requested to fetch secondary attribute " << attributeName << " of user " << uID << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 
@@ -1017,7 +1017,7 @@ crow::response getUserAttribute(PersistentStore& store, const crow::request& req
 crow::response setUserAttribute(PersistentStore& store, const crow::request& req, 
                                 std::string uID, std::string attributeName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to set secondary attribute " << attributeName << " for user " << uID);
+	log_info(user << " requested to set secondary attribute " << attributeName << " for user " << uID << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -1051,7 +1051,7 @@ crow::response setUserAttribute(PersistentStore& store, const crow::request& req
 crow::response deleteUserAttribute(PersistentStore& store, const crow::request& req,
                                    std::string uID, std::string attributeName){
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to delete secondary attribute " << attributeName << " from user " << uID);
+	log_info(user << " requested to delete secondary attribute " << attributeName << " from user " << uID << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -1070,7 +1070,7 @@ crow::response deleteUserAttribute(PersistentStore& store, const crow::request& 
 crow::response findUser(PersistentStore& store, const crow::request& req){
 	//this is the requesting user, not the requested user
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested user information for a globus ID");
+	log_info(user << " requested user information for a globus ID from " << req.remote_endpoint);
 	if(!user || !user.superuser)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -1099,7 +1099,7 @@ crow::response findUser(PersistentStore& store, const crow::request& req){
 crow::response checkUnixName(PersistentStore& store, const crow::request& req){
 	//this is the requesting user
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested whether a unix name is in use");
+	log_info(user << " requested whether a unix name is in use from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 		
@@ -1122,7 +1122,7 @@ crow::response checkUnixName(PersistentStore& store, const crow::request& req){
 crow::response replaceUserToken(PersistentStore& store, const crow::request& req, const std::string uID){
 	//important: user is the user issuing the command, not the user being modified
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to replace access token for " << uID);
+	log_info(user << " requested to replace access token for " << uID << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//users can only be altered by admins and themselves
@@ -1158,7 +1158,7 @@ crow::response replaceUserToken(PersistentStore& store, const crow::request& req
 crow::response updateLastUseTime(PersistentStore& store, const crow::request& req, const std::string uID){
 	//important: user is the user issuing the command, not the user being modified
 	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested to update last use time for " << uID);
+	log_info(user << " requested to update last use time for " << uID << " from " << req.remote_endpoint);
 	if(!user)
 		return crow::response(403,generateError("Not authorized"));
 	//users can only be altered by admins and themselves
