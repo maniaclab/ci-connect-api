@@ -334,6 +334,22 @@ fi
 USERS_TO_CREATE=$(echo "$ACTIVE_USERS" | join -v2 existing_users -)
 USERS_TO_UPDATE=$(echo "$ACTIVE_USERS" | join existing_users -)
 
+set_osg_disk_quotas(){
+	USER="$1"
+	mkdir -p /public/"$USER"
+	chown "$USER": /public/"$USER"
+	# We might want to factor these out and make them configurable.
+	# 50G/100G for $HOME, 500G for Ceph
+	xfs_quota -x -c "limit -u bsoft=50000000000 bhard=100000000000 $USER" /home
+	setfattr -n ceph.quota.max_bytes -v 500000000000 /public/"$USER"
+}
+
+set_stash_disk(){
+	USER="$1"
+	mkdir -p /stash/user/"$USER"
+	chown "$USER": /stash/user/"$USER"
+}
+
 set_ssh_authorized_keys(){
 	USER="$1"
 	USER_HOME_DIR="$2"
@@ -408,6 +424,11 @@ for USER in $USERS_TO_CREATE; do
 		FILTERED_USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
 		DEFAULT_GROUP=$(/usr/bin/env echo "$FILTERED_USER_GROUPS" | head -n 1)
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
+		if [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
+		set_osg_disk_quotas "$USER"
+		elif [ "$GROUP_ROOT_GROUP" == "root.cms" ] | [ "$GROUP_ROOT_GROUP" == "root.duke" ]; then
+		set_stash_disk "$USER"
+		fi  
 		echo "$USER" >> new_users
 	fi
 done
