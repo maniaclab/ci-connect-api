@@ -1627,6 +1627,7 @@ std::vector<GroupMembership> PersistentStore::getMembersOfGroup(const std::strin
 	CacheRecord<std::string> record;
 	auto cached = groupMembershipByGroupCache.find(groupName);
 	if (cached.second > std::chrono::steady_clock::now()) {
+		log_info("Returning cached members of Group " << groupName);
 		auto records = cached.first;
 		std::vector<GroupMembership> memberships;
 		for (auto record : records) {

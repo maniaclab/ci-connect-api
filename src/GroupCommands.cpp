@@ -649,6 +649,7 @@ crow::response listGroupMembers(PersistentStore& store, const crow::request& req
 		return crow::response(404,generateError("Group not found"));
 	
 	auto memberships=store.getMembersOfGroup(targetGroup.name);
+	log_info("Found " << memberships.size() << " members of " << groupName);
 	
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
