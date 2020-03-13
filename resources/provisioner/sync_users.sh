@@ -261,6 +261,19 @@ if [ "$?" -ne 0 ]; then
 fi
 SUBGROUPS=$(jq '.groups | map(.name)' subgroups.json | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p')
 
+# Check that the existing users list is correct, at least to the extent that all listed users do exist
+for USER in $(cat existing_users); do
+	if grep "^${USER}:" /etc/passwd > /dev/null; then
+		: # user exists; good
+	else
+		echo "User $USER is expected to exist, but does not"
+		if [ ! "$DRY_RUN" ]; then
+			sed '/^'"$USER"'$/d' existing_users > existing_users.new
+			mv existing_users.new existing_users
+		fi
+	fi
+done
+
 # Delete all existing users which should not exist
 echo "$ACTIVE_USERS
 $DISABLED_USERS" | sort > all_users
