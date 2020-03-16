@@ -1,6 +1,43 @@
 #!/bin/sh
 
-LOCK_DIR="sync_in_progress"
+LOCK_FILE="/var/lock/connect_sync"
+LOCK_DATA=$(printf '%10u\n' "$$")
+
+acquire_lock(){
+	if [ -e "$LOCK_FILE" ]; then
+		# check whether the lock is associated with a running process
+		OTHER_PID=$(grep -o '[0-9]*$' "$LOCK_FILE")
+		if [ "$?" -eq 0 ]; then
+			echo "PID from lock file: $OTHER_PID"
+			ps -p "$OTHER_PID" > /dev/null
+			if [ "$?" -ne 0 ]; then
+				echo "Warning: Lock file $LOCK_FILE apparently held by defunct process; proceeding" 1>&2
+			else
+				echo "Error: Lock file $LOCK_FILE already exists; cowardly refusing to continue" 1>&2
+				exit 1
+			fi
+		else
+			echo "Lock file not intelligible"
+			echo "Error: Lock file $LOCK_FILE already exists; cowardly refusing to continue" 1>&2
+			exit 1
+		fi
+	fi
+	echo "$LOCK_DATA" > "$LOCK_FILE"
+	if [ "$?" -ne 0 ]; then
+		echo "Error Failed to write to lock file $LOCK_FILE; cowardly refusing to continue" 1>&2
+		exit 1
+	fi
+}
+
+release_lock() {
+	if [ ! -e "$LOCK_FILE" ]; then
+		echo "Error: Lock file  $LOCK_FILE does not exist" 1>&2
+	elif grep -v '^'"${LOCK_DATA}"'$' "$LOCK_FILE" > /dev/null; then
+		echo "Error: Lock file  $LOCK_FILE blongs to another process" 1>&2
+	else
+		rm "$LOCK_FILE"
+	fi
+}
 
 HELP="Usage: sync_users.sh [OPTION]...
 
@@ -96,12 +133,10 @@ if [ "$ERASE_HOME" ]; then
 	echo "Home directories of deleted users will be erased"
 fi
 
+date -u
+
 if [ "$DO_WIPE" ]; then
-	mkdir "$LOCK_DIR"
-	if [ "$?" -ne 0 ]; then
-		echo "Error: Failed to create new $LOCK_DIR lock directory; cowardly refusing to continue" 1>&2
-		exit 1
-	fi
+	acquire_lock
 	echo "Warning: Erasing all provisioned users and groups in 5 seconds"
 	sleep 5
 	# erase users
@@ -134,7 +169,7 @@ if [ "$DO_WIPE" ]; then
 			fi
 		done
 	fi
-	rmdir "$LOCK_DIR"
+	release_lock
 	exit
 fi
 
@@ -185,17 +220,13 @@ if [ ! "$DRY_RUN" ]; then
 	fi
 fi
 
-mkdir "$LOCK_DIR"
-if [ "$?" -ne 0 ]; then
-	echo "Error: Failed to create new $LOCK_DIR lock directory; cowardly refusing to continue" 1>&2
-	exit 1
-fi
+acquire_lock
 
 # Get all members of the group
 curl -sf ${API_ENDPOINT}/v1alpha1/groups/${USER_SOURCE_GROUP}/members?token=${API_TOKEN} > group_members.json
 if [ "$?" -ne 0 ]; then
 	echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/groups/${USER_SOURCE_GROUP}/members" 1>&2
-	rmdir "$LOCK_DIR"
+	release_lock
 	exit 1
 fi
 ACTIVE_USERS=$(jq '.memberships | map(select(.state==("admin","active")) | .user_name)' group_members.json | sed -n 's|.*"\([^"]*\)".*|\1|p' | sort)
@@ -228,7 +259,7 @@ while [ "$PROCESSED" -lt "$N_ACTIVE" ]; do
 	curl -sf -X POST --data '@user_request' ${API_ENDPOINT}/v1alpha1/multiplex?token=${API_TOKEN} > raw_user_data
 	if [ "$?" -ne 0 ]; then
 		echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/multiplex" 1>&2
-		rmdir "$LOCK_DIR"
+		release_lock
 		exit 1
 	fi
 	jq '.[] | .body | fromjson | .metadata' raw_user_data | sed -e '/"institution"/d' \
@@ -256,7 +287,7 @@ fi
 curl -sf ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}/subgroups?token=${API_TOKEN} > subgroups.json
 if [ "$?" -ne 0 ]; then
 	echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}/subgroups" 1>&2
-	rmdir "$LOCK_DIR"
+	release_lock
 	exit 1
 fi
 SUBGROUPS=$(jq '.groups | map(.name)' subgroups.json | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p')
@@ -306,7 +337,7 @@ else
 	GID=$(curl -sf "${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}?token=${API_TOKEN}" | jq -r '.metadata.unix_id')
 	if [ "$?" -ne 0 ]; then
 		echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}" 1>&2
-		rmdir "$LOCK_DIR"
+		release_lock
 		exit 1
 	fi
 	echo "Creating group $BASE_GROUP_NAME with gid $GID"
@@ -314,7 +345,7 @@ else
 		groupadd "$BASE_GROUP_NAME" -g $GID
 		if [ "$?" -ne 0 ]; then
 			echo "Aborting due to group creation error" 1>&2
-			rmdir "$LOCK_DIR"
+			release_lock
 			exit 1
 		fi
 	fi
@@ -333,7 +364,7 @@ for GROUP in $SUBGROUPS; do
 			groupadd "$GROUP" -g $GID
 			if [ "$?" -ne 0 ]; then
 				echo "Aborting due to group creation error" 1>&2
-				rmdir "$LOCK_DIR"
+				release_lock
 				exit 1
 			fi
 		fi
@@ -410,7 +441,7 @@ cat /dev/null > new_users
 for USER in $USERS_TO_CREATE; do
 	if [ -f user_data -a ! -s user_data ]; then
 		echo "user_data is empty!" 1>&2
-		rmdir "$LOCK_DIR"
+		release_lock
 		exit 1
 	fi
 	USER_DATA=$(jq 'select(.unix_name==("'${USER}'"))' user_data)
@@ -424,7 +455,7 @@ for USER in $USERS_TO_CREATE; do
 	RAW_USER_GROUPS=$(/usr/bin/env echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
 	if [ "$?" -ne 0 ]; then
 		echo "Failed to extract group_memberships for user $USER" 1>&2
-		rmdir "$LOCK_DIR"
+		release_lock
 		exit 1
 	fi
 	USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
@@ -437,11 +468,11 @@ for USER in $USERS_TO_CREATE; do
 			mv existing_users.new existing_users
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to replace existing_users file" 1>&2
-				rmdir "$LOCK_DIR"
+				release_lock
 				exit 1
 			fi
 			rm new_users
-			rmdir "$LOCK_DIR"
+			release_lock
 			exit 1
 		fi
 		set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
@@ -463,7 +494,7 @@ if [ ! "$DRY_RUN" ]; then
 	mv existing_users.new existing_users
 	if [ "$?" -ne 0 ]; then
 		echo "Failed to replace existing_users file" 1>&2
-		rmdir "$LOCK_DIR"
+		release_lock
 		exit 1
 	fi
 	rm new_users
@@ -507,4 +538,4 @@ for USER in $DISABLED_USERS; do
 	fi
 done
 
-rmdir "$LOCK_DIR"
+release_lock
