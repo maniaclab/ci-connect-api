@@ -312,8 +312,12 @@ for DEFUNCT_USER in $(join -v1 existing_users all_users); do
 	echo "Deleting user $DEFUNCT_USER"
 	if [ ! "$DRY_RUN" ]; then
 		$USERDEL "$DEFUNCT_USER"
-		sed '/^'"$DEFUNCT_USER"'$/d' existing_users > existing_users.new
-		mv existing_users.new existing_users
+		if [ "$?" -eq 0 ]; then
+			sed '/^'"$DEFUNCT_USER"'$/d' existing_users > existing_users.new
+			mv existing_users.new existing_users
+		else
+			echo "Error: Failed to delete user $DEFUNCT_USER" 1>&2
+		fi
 	fi
 done
 rm all_users
