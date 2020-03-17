@@ -233,6 +233,7 @@ ACTIVE_USERS=$(jq '.memberships | map(select(.state==("admin","active")) | .user
 DISABLED_USERS=$(jq '.memberships | map(select(.state==("disabled")) | .user_name)' group_members.json | sed -n 's|.*"\([^"]*\)".*|\1|p' | sort)
 N_ACTIVE=$(/usr/bin/env echo "$ACTIVE_USERS" | wc -l)
 echo "$N_ACTIVE active group members"
+cat group_members.json
 rm group_members.json
 
 # Fetch details about active group members
