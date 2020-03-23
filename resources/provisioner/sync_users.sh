@@ -229,6 +229,17 @@ if [ "$?" -ne 0 ]; then
 	release_lock
 	exit 1
 fi
+ERRMSG=$(jq '.message' group_members.json)
+if [ "$?" -ne 0 ]; then
+	echo "Error: Unable to parse group membership data" 1>&2
+	release_lock
+	exit 1
+fi
+if [ "$ERRMSG" != "null" ]; then
+	echo "Error: $ERRMSG" 1>&2
+	release_lock
+	exit 1
+fi
 ACTIVE_USERS=$(jq '.memberships | map(select(.state==("admin","active")) | .user_name)' group_members.json | sed -n 's|.*"\([^"]*\)".*|\1|p' | sort)
 DISABLED_USERS=$(jq '.memberships | map(select(.state==("disabled")) | .user_name)' group_members.json | sed -n 's|.*"\([^"]*\)".*|\1|p' | sort)
 N_ACTIVE=$(/usr/bin/env echo "$ACTIVE_USERS" | wc -l)
