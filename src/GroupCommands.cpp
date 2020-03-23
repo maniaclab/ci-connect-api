@@ -648,6 +648,7 @@ crow::response listGroupMembers(PersistentStore& store, const crow::request& req
 	if(!targetGroup)
 		return crow::response(404,generateError("Group not found"));
 	
+	try{
 	auto memberships=store.getMembersOfGroup(targetGroup.name);
 	log_info("Found " << memberships.size() << " members of " << groupName);
 	
@@ -668,7 +669,15 @@ crow::response listGroupMembers(PersistentStore& store, const crow::request& req
 	}
 	result.AddMember("memberships", resultItems, alloc);
 	
+	log_info("Sending OK response with group membership data");
 	return crow::response(to_string(result));
+	}catch(std::exception& ex){
+		log_error("Failure providing group membership data: " << ex.what());
+		throw;
+	}catch(...){
+		log_error("Unknown failure providing group membership data");
+		throw;
+	}
 }
 
 crow::response getGroupMemberStatus(PersistentStore& store, const crow::request& req, const std::string& userID, std::string groupName){
