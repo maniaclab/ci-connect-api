@@ -638,6 +638,9 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, std
 }
 
 crow::response listGroupMembers(PersistentStore& store, const crow::request& req, std::string groupName){
+	using namespace std::chrono;
+	high_resolution_clock::time_point t1 = high_resolution_clock::now();
+	
 	const User user=authenticateUser(store, req.url_params.get("token"));
 	log_info(user << " requested to list members of " << groupName << " from " << req.remote_endpoint);
 	if(!user)
@@ -669,7 +672,9 @@ crow::response listGroupMembers(PersistentStore& store, const crow::request& req
 	}
 	result.AddMember("memberships", resultItems, alloc);
 	
-	log_info("Sending OK response with group membership data");
+	high_resolution_clock::time_point t2 = high_resolution_clock::now();
+	log_info("Sending OK response with group membership data after " <<
+	         duration_cast<duration<double>>(t2-t1).count() << " seconds");
 	return crow::response(to_string(result));
 	}catch(std::exception& ex){
 		log_error("Failure providing group membership data: " << ex.what());
