@@ -223,12 +223,15 @@ fi
 acquire_lock
 
 # Get all members of the group
+REQUEST_START=$(date "+%s.%N")
 curl -sf ${API_ENDPOINT}/v1alpha1/groups/${USER_SOURCE_GROUP}/members?token=${API_TOKEN} > group_members.json
 if [ "$?" -ne 0 ]; then
 	echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/groups/${USER_SOURCE_GROUP}/members" 1>&2
 	release_lock
 	exit 1
 fi
+REQUEST_END=$(date "+%s.%N")
+echo "$REQUEST_START $REQUEST_END" | awk '{print "Request took",($2-$1),"seconds"}'
 cat group_members.json
 if [ -s group_members.json ]; then
 	if jq -es 'if . == [] then null else .[] | .memberships end' group_members.json > /dev/null ; then
