@@ -34,4 +34,11 @@ crow::response updateLastUseTime(PersistentStore& store, const crow::request& re
                                  
 bool validateSSHKeys(const std::string& keyData);
 
+///\param userID the user whose admin status should be checked
+///\param groupName the name of the group whose parent groups should be checked 
+///                 for the given user's status. This group itself is _not_ checked. 
+///\return the name of most closely enclosing group of which the user is an admin, 
+///        or the empty string if the user is not an admin of any enclosing group
+std::string adminInAnyEnclosingGroup(PersistentStore& store, const std::string& userID, std::string groupName);
+
 #endif //SLATE_USER_COMMANDS_H

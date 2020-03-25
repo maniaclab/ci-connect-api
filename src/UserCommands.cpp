@@ -4,6 +4,20 @@
 #include "ServerUtilities.h"
 #include "GroupCommands.h"
 
+std::string adminInAnyEnclosingGroup(PersistentStore& store, const std::string& userID, std::string groupName){
+	while(!groupName.empty()){
+		auto sepPos=groupName.rfind('.');
+		if(sepPos==std::string::npos)
+			return ""; //no farther up to walk
+		groupName=groupName.substr(0,sepPos);
+		if(groupName.empty())
+			return "";
+		if(store.userStatusInGroup(userID,groupName).state==GroupMembership::Admin)
+			return groupName;
+	}
+	return "";
+}
+
 crow::response listUsers(PersistentStore& store, const crow::request& req){
 	const User user=authenticateUser(store, req.url_params.get("token"));
 	log_info(user << " requested to list users from " << req.remote_endpoint);
@@ -470,7 +484,8 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 	metadata.AddMember("email", targetUser.email, alloc);
 	metadata.AddMember("phone", targetUser.phone, alloc);
 	metadata.AddMember("institution", targetUser.institution, alloc);
-	metadata.AddMember("access_token", targetUser.token, alloc);
+	if(user==targetUser || user.superuser)
+		metadata.AddMember("access_token", targetUser.token, alloc);
 	if(targetUser.sshKey!=" ")
 		metadata.AddMember("public_key", targetUser.sshKey, alloc);
 	else
@@ -707,20 +722,6 @@ crow::response listUserGroupRequests(PersistentStore& store, const crow::request
 }
 
 namespace{
-	///\return the name of most closely enclosing group of which the user is an admin
-	std::string adminInAnyEnclosingGroup(PersistentStore& store, const std::string& userID, std::string groupName){
-		while(!groupName.empty()){
-			auto sepPos=groupName.rfind('.');
-			if(sepPos==std::string::npos)
-				return ""; //no farther up to walk
-			groupName=groupName.substr(0,sepPos);
-			if(groupName.empty())
-				return "";
-			if(store.userStatusInGroup(userID,groupName).state==GroupMembership::Admin)
-				return groupName;
-		}
-		return "";
-	}
 	
 	///Make sure that the given user is a member of every group enclosing the 
 	///specified one, and if not, add them. This bypasses pending states, etc.

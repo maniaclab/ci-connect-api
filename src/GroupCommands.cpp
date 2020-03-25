@@ -9,6 +9,7 @@
 #include "Logging.h"
 #include "ServerUtilities.h"
 #include "server_version.h"
+#include "UserCommands.h"
 
 namespace{
 	//Science categories defined in https://www.nsf.gov/statistics/nsf13327/pdf/tabb1.pdf
@@ -134,7 +135,8 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		return crow::response(404,generateError("Parent group not found"));
 	//only an admin in the parent group may create child groups
 	//other members may request the creation of child groups
-	if(!user.superuser && !store.userStatusInGroup(user.unixName,parentGroup.name).isMember())
+	if(!user.superuser && !store.userStatusInGroup(user.unixName,parentGroup.name).isMember()
+	   && adminInAnyEnclosingGroup(store,user.unixName,parentGroup.name).empty())
 		return crow::response(403,generateError("Not authorized"));
 	{
 		Group existingGroup=store.getGroup(newGroupName);
@@ -264,8 +266,11 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 	
 	group.creationDate=timestamp();
 	
-	//if the user is a superuser or group admin, we just go ahead with creating the group
-	if(user.superuser || store.userStatusInGroup(user.unixName,parentGroup.name).state==GroupMembership::Admin){
+	//if the user is a superuser, group admin, or admin of an enclosing group, 
+	//we just go ahead with creating the group
+	if(user.superuser || 
+	   store.userStatusInGroup(user.unixName,parentGroup.name).state==GroupMembership::Admin
+	   || !adminInAnyEnclosingGroup(store,user.unixName,parentGroup.name).empty()){
 		group.valid=true;
 	
 		log_info("Creating Group " << group);
@@ -273,22 +278,24 @@ crow::response createGroup(PersistentStore& store, const crow::request& req,
 		if(!created)
 			return crow::response(500,generateError("Group creation failed"));
 	
-		//Make the creating user an initial member of the group
-		GroupMembership initialAdmin;
-		initialAdmin.userName=user.unixName;
-		initialAdmin.groupName=group.name;
-		initialAdmin.state=GroupMembership::Admin;
-		initialAdmin.stateSetBy="user:"+user.unixName;
-		initialAdmin.valid=true;
-		bool added=store.setUserStatusInGroup(initialAdmin);
-		if(!added){
-			//TODO: possible problem: If we get here, we may end up with a valid group
-			//but with no members and not return its ID either
-			auto problem="Failed to add creating user "+
-						 boost::lexical_cast<std::string>(user)+" to new Group "+
-						 boost::lexical_cast<std::string>(group);
-			log_error(problem);
-			return crow::response(500,generateError(problem));
+		if(store.userStatusInGroup(user.unixName,parentGroup.name).state!=GroupMembership::NonMember){
+			//Make the creating user an initial member of the group
+			GroupMembership initialAdmin;
+			initialAdmin.userName=user.unixName;
+			initialAdmin.groupName=group.name;
+			initialAdmin.state=GroupMembership::Admin;
+			initialAdmin.stateSetBy="user:"+user.unixName;
+			initialAdmin.valid=true;
+			bool added=store.setUserStatusInGroup(initialAdmin);
+			if(!added){
+				//TODO: possible problem: If we get here, we may end up with a valid group
+				//but with no members and not return its ID either
+				auto problem="Failed to add creating user "+
+							 boost::lexical_cast<std::string>(user)+" to new Group "+
+							 boost::lexical_cast<std::string>(group);
+				log_error(problem);
+				return crow::response(500,generateError(problem));
+			}
 		}
 	
 		log_info("Created " << group << " on behalf of " << user);
@@ -392,7 +399,9 @@ crow::response updateGroup(PersistentStore& store, const crow::request& req, std
 		
 	groupName=canonicalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser && store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin)
+	if(!user.superuser && 
+	   store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin &&
+	   adminInAnyEnclosingGroup(store,user.unixName,groupName).empty())
 		return crow::response(403,generateError("Not authorized"));
 	
 	//unpack the new Group info
@@ -476,6 +485,7 @@ crow::response updateGroupRequest(PersistentStore& store, const crow::request& r
 	std::string enclosingGroupName=enclosingGroup(groupName);
 	if(!user.superuser && 
 	  store.userStatusInGroup(user.unixName,enclosingGroupName).state!=GroupMembership::Admin
+	  && adminInAnyEnclosingGroup(store,user.unixName,enclosingGroupName).empty()
 	  && user.unixName!=targetRequest.requester)
 		return crow::response(403,generateError("Not authorized"));
 	
@@ -599,7 +609,9 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, std
 		return crow::response(403,generateError("Not authorized"));
 	groupName=canonicalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser && store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin)
+	if(!user.superuser && 
+	   store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin
+	   && adminInAnyEnclosingGroup(store,user.unixName,groupName).empty())
 		return crow::response(403,generateError("Not authorized"));
 	
 	Group targetGroup = store.getGroup(groupName);
@@ -794,7 +806,9 @@ crow::response approveSubgroupRequest(PersistentStore& store, const crow::reques
 		
 	parentGroupName=canonicalizeGroupName(parentGroupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser && store.userStatusInGroup(user.unixName,parentGroupName).state!=GroupMembership::Admin)
+	if(!user.superuser && 
+	   store.userStatusInGroup(user.unixName,parentGroupName).state!=GroupMembership::Admin
+	   && adminInAnyEnclosingGroup(store,user.unixName,parentGroupName).empty())
 		return crow::response(403,generateError("Not authorized"));
 	
 	newGroupName=canonicalizeGroupName(newGroupName,parentGroupName);
@@ -820,21 +834,23 @@ crow::response approveSubgroupRequest(PersistentStore& store, const crow::reques
 	log_info("Approving creation of subgroup " << newGroupName);
 	bool success=store.approveGroupRequest(newGroupName);
 	
-	GroupMembership initialAdmin;
-	initialAdmin.userName=newGroupRequest.requester;
-	initialAdmin.groupName=newGroupRequest.name;
-	initialAdmin.state=GroupMembership::Admin;
-	initialAdmin.stateSetBy="user:"+user.unixName;
-	initialAdmin.valid=true;
-	bool added=store.setUserStatusInGroup(initialAdmin);
-	if(!added){
-		//TODO: possible problem: If we get here, we may end up with a valid group
-		//but with no members
-		auto problem="Failed to add creating user "+
-					 boost::lexical_cast<std::string>(user)+" to new Group "+
-					 boost::lexical_cast<std::string>(newGroupRequest);
-		log_error(problem);
-		return crow::response(500,generateError(problem));
+	if(store.userStatusInGroup(newGroupRequest.requester,parentGroupName).state!=GroupMembership::NonMember){
+		GroupMembership initialAdmin;
+		initialAdmin.userName=newGroupRequest.requester;
+		initialAdmin.groupName=newGroupRequest.name;
+		initialAdmin.state=GroupMembership::Admin;
+		initialAdmin.stateSetBy="user:"+user.unixName;
+		initialAdmin.valid=true;
+		bool added=store.setUserStatusInGroup(initialAdmin);
+		if(!added){
+			//TODO: possible problem: If we get here, we may end up with a valid group
+			//but with no members
+			auto problem="Failed to add creating user "+
+						 boost::lexical_cast<std::string>(user)+" to new Group "+
+						 boost::lexical_cast<std::string>(newGroupRequest);
+			log_error(problem);
+			return crow::response(500,generateError(problem));
+		}
 	}
 	
 	if(!success)
@@ -864,7 +880,9 @@ crow::response denySubgroupRequest(PersistentStore& store, const crow::request& 
 		
 	parentGroupName=canonicalizeGroupName(parentGroupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser && store.userStatusInGroup(user.unixName,parentGroupName).state!=GroupMembership::Admin)
+	if(!user.superuser && 
+	   store.userStatusInGroup(user.unixName,parentGroupName).state!=GroupMembership::Admin
+	   && adminInAnyEnclosingGroup(store,user.unixName,parentGroupName).empty())
 		return crow::response(403,generateError("Not authorized"));
 	
 	newGroupName=canonicalizeGroupName(newGroupName);
@@ -936,7 +954,9 @@ crow::response setGroupAttribute(PersistentStore& store, const crow::request& re
 		
 	groupName=canonicalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser && store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin)
+	if(!user.superuser && 
+	   store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin
+	   && adminInAnyEnclosingGroup(store,user.unixName,groupName).empty())
 		return crow::response(403,generateError("Not authorized"));
 
 	rapidjson::Document body;
@@ -970,7 +990,9 @@ crow::response deleteGroupAttribute(PersistentStore& store, const crow::request&
 	
 	groupName=canonicalizeGroupName(groupName);
 	//Only superusers and admins of a Group can alter it
-	if(!user.superuser && store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin)
+	if(!user.superuser && 
+	   store.userStatusInGroup(user.unixName,groupName).state!=GroupMembership::Admin
+	   && adminInAnyEnclosingGroup(store,user.unixName,groupName).empty())
 		return crow::response(403,generateError("Not authorized"));
 	
 	bool success=store.removeGroupSecondaryAttribute(groupName, attributeName);
