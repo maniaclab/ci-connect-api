@@ -903,7 +903,27 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 			store.getEmailClient().sendEmail(userMessage);
 		}
 	}
-	else{ //otherwise just inform the user
+	else if(membership.state==GroupMembership::Active){
+		EmailClient::Email message;
+		message.fromAddress="noreply@api.ci-connect.net";
+		message.toAddresses={targetUser.email};
+		message.subject="CI-Connect group membership change";
+		message.body="This is an automatic notification that your account ("+
+		             targetUser.unixName+") is now an active member of the \""+
+		             group.displayName+"\" Connect group.";
+		store.getEmailClient().sendEmail(message);
+	}
+	else if(membership.state==GroupMembership::Admin){
+		EmailClient::Email message;
+		message.fromAddress="noreply@api.ci-connect.net";
+		message.toAddresses={targetUser.email};
+		message.subject="CI-Connect group membership change";
+		message.body="This is an automatic notification that your account ("+
+		             targetUser.unixName+") is now an admin member of the \""+
+		             group.displayName+"\" Connect group.";
+		store.getEmailClient().sendEmail(message);
+	}
+	else{ //otherwise just inform the user with a generic message
 		EmailClient::Email message;
 		message.fromAddress="noreply@api.ci-connect.net";
 		message.toAddresses={targetUser.email};
