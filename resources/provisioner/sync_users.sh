@@ -436,6 +436,12 @@ set_sptlocal_disk_quotas(){
 	fi
 }
 
+set_sptgrid_disk(){
+        USER="$1"
+        chimera mkdir /sptgrid/user/"$USER"
+        chimera chown "$USER": /sptgrid/user/"$USER"
+}
+
 set_stash_disk(){
 	USER="$1"
 	mkdir -p /stash/user/"$USER"
@@ -521,9 +527,12 @@ for USER in $USERS_TO_CREATE; do
 		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
 			set_stash_disk "$USER"
 		fi
-		# SPT specific: create user directories on sptlocal.grid.uchicago.edu only. sorry...
+		# SPT specific: Create user directories on sptlocal.grid.uchicago.edu and osg-dcache-head.grid.uchicago.edu only. Sorry...
 		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "sptlocal.grid.uchicago.edu" ]; then
 			set_sptlocal_disk_quotas "$USER"
+		fi
+		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "osg-dcache-head.grid.uchicago.edu" ]; then
+			set_sptgrid_disk "$USER"
 		fi
 		echo "$USER" >> new_users
 	fi
