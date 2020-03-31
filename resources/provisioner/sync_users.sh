@@ -422,6 +422,20 @@ set_osg_disk_quotas(){
 	fi
 }
 
+set_spt_disk_quotas(){
+	USER="$1"
+	zfs create tank/sptlocal/user/"$USER"
+	chown "$USER": /tank/sptlocal/user/"$USER"
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/sptlocal/user/"$USER" 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		echo "ZFS dataset creation failed for $USER"
+	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=1TB tank/sptlocal/user/"$USER"
+	else
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA"
+	fi
+}
+
 set_stash_disk(){
 	USER="$1"
 	mkdir -p /stash/user/"$USER"
@@ -506,6 +520,10 @@ for USER in $USERS_TO_CREATE; do
 			set_osg_disk_quotas "$USER"
 		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
 			set_stash_disk "$USER"
+		fi
+		# SPT specific: create user directories on sptlocal.grid.uchicago.edu only. sorry...
+		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "sptlocal.grid.uchicago.edu" ]; then
+			set_spt_disk_quotas "$USER"
 		fi
 		echo "$USER" >> new_users
 	fi
