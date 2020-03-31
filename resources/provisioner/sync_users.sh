@@ -422,7 +422,7 @@ set_osg_disk_quotas(){
 	fi
 }
 
-set_spt_disk_quotas(){
+set_sptlocal_disk_quotas(){
 	USER="$1"
 	zfs create tank/sptlocal/user/"$USER"
 	chown "$USER": /tank/sptlocal/user/"$USER"
@@ -523,7 +523,7 @@ for USER in $USERS_TO_CREATE; do
 		fi
 		# SPT specific: create user directories on sptlocal.grid.uchicago.edu only. sorry...
 		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "sptlocal.grid.uchicago.edu" ]; then
-			set_spt_disk_quotas "$USER"
+			set_sptlocal_disk_quotas "$USER"
 		fi
 		echo "$USER" >> new_users
 	fi
