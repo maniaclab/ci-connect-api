@@ -411,7 +411,7 @@ set_osg_disk_quotas(){
 	if [ $? -ne 0 ]; then
 		setfattr -n ceph.quota.max_bytes -v 500000000000 /public/"$USER"
 	else 
-		echo "$USER already has a quota of $CURRENT_QUOTA"
+		echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
 	fi
 
 	CURRENT_XFS_QUOTA=$(xfs_quota -x -c 'report' /home | grep "$USER")
