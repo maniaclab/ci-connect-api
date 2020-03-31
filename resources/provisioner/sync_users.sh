@@ -411,7 +411,7 @@ set_osg_disk_quotas(){
 	if [ $? -ne 0 ]; then
 		setfattr -n ceph.quota.max_bytes -v 500000000000 /public/"$USER"
 	else 
-		echo "$USER already has a quota of $CURRENT_QUOTA"
+		echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
 	fi
 
 	CURRENT_XFS_QUOTA=$(xfs_quota -x -c 'report' /home | grep "$USER")
@@ -420,6 +420,28 @@ set_osg_disk_quotas(){
 	else
 		echo "$USER already has a quota of $(echo "$CURRENT_XFS_QUOTA" | awk '{print $3}')"
 	fi
+}
+
+set_sptlocal_disk_quotas(){
+	USER="$1"
+	zfs create tank/sptlocal/user/"$USER"
+	chown "$USER": /tank/sptlocal/user/"$USER"
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/sptlocal/user/"$USER" 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		echo "ZFS dataset creation failed for $USER"
+	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=1TB tank/sptlocal/user/"$USER"
+	else
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA"
+	fi
+}
+
+set_sptgrid_disk(){
+        USER="$1"
+        USER_ID="$2"
+	GROUP_ID="$3"
+        chimera mkdir /sptgrid/user/"$USER"
+        chimera chown "$USER_ID":"$GROUP_ID" /sptgrid/user/"$USER"
 }
 
 set_stash_disk(){
@@ -506,6 +528,14 @@ for USER in $USERS_TO_CREATE; do
 			set_osg_disk_quotas "$USER"
 		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
 			set_stash_disk "$USER"
+		fi
+		# SPT specific: Create user directories on sptlocal.grid.uchicago.edu and xenon-dcache-head.grid.uchicago.edu only. Sorry...
+		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "sptlocal.grid.uchicago.edu" ]; then
+			set_sptlocal_disk_quotas "$USER"
+		fi
+		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "xenon-dcache-head.grid.uchicago.edu" ]; then
+			GROUP_ID=$(grep spt: /etc/group | cut -d: -f3)
+			set_sptgrid_disk "$USER" "$USER_ID" "$GROUP_ID"
 		fi
 		echo "$USER" >> new_users
 	fi
