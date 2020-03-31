@@ -438,8 +438,10 @@ set_sptlocal_disk_quotas(){
 
 set_sptgrid_disk(){
         USER="$1"
+        USER_ID="$2"
+	GROUP_ID="$3"
         chimera mkdir /sptgrid/user/"$USER"
-        chimera chown "$USER": /sptgrid/user/"$USER"
+        chimera chown "$USER_ID":"$GROUP_ID" /sptgrid/user/"$USER"
 }
 
 set_stash_disk(){
@@ -532,7 +534,8 @@ for USER in $USERS_TO_CREATE; do
 			set_sptlocal_disk_quotas "$USER"
 		fi
 		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "xenon-dcache-head.grid.uchicago.edu" ]; then
-			set_sptgrid_disk "$USER"
+			GROUP_ID=$(grep spt: /etc/group | cut -d: -f3)
+			set_sptgrid_disk "$USER" "$USER_ID" "$GROUP_ID"
 		fi
 		echo "$USER" >> new_users
 	fi
