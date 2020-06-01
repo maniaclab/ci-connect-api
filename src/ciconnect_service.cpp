@@ -409,8 +409,13 @@ int main(int argc, char* argv[]){
 	  	return crow::response(400,generateError("Unsupported API version")); });
 	
 	server.loglevel(crow::LogLevel::Warning);
-	if(!config.sslCertificate.empty())
-		server.port(port).ssl_file(config.sslCertificate,config.sslKey).multithreaded().run();
-	else
-		server.port(port).multithreaded().run();
+	try{
+		if(!config.sslCertificate.empty())
+			server.port(port).ssl_file(config.sslCertificate,config.sslKey).multithreaded().run();
+		else
+			server.port(port).multithreaded().run();
+	}catch(std::exception& ex){
+		std::cerr << "Fatal error: " << ex.what() << std::endl;
+		return 1;
+	}
 }
