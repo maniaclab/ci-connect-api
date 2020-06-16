@@ -450,6 +450,12 @@ set_stash_disk(){
 	chown "$USER": /stash/user/"$USER"
 }
 
+set_collab_disk(){
+	USER="$1"
+	mkdir -p /collab/user/"$USER"
+	chown "$USER": /collab/user/"$USER"
+}
+
 set_ssh_authorized_keys(){
 	USER="$1"
 	USER_HOME_DIR="$2"
@@ -526,8 +532,12 @@ for USER in $USERS_TO_CREATE; do
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 		if [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			set_osg_disk_quotas "$USER"
-		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
+		elif [ "$GROUP_ROOT_GROUP" == "root.cms" ]; then
 			set_stash_disk "$USER"
+		fi
+		# Collab Support specific
+		if [ "$GROUP_ROOT_GROUP" == "root.duke" -o "$GROUP_ROOT_GROUP" == "root.uchicago" -o "$GROUP_ROOT_GROUP" == "root.veritas" ]; then
+			set_collab_disk "$USER"
 		fi
 		# SPT specific: Create user directories on sptlocal.grid.uchicago.edu and xenon-dcache-head.grid.uchicago.edu only. Sorry...
 		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "sptlocal.grid.uchicago.edu" ]; then
