@@ -425,7 +425,8 @@ set_osg_disk_quotas(){
 set_sptlocal_disk_quotas(){
 	USER="$1"
 	zfs create tank/sptlocal/user/"$USER"
-	chown "$USER": /tank/sptlocal/user/"$USER"
+	mkdir /tank/sptlocal/user/"$USER"/public_html
+	chown -R "$USER": /tank/sptlocal/user/"$USER"
 	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/sptlocal/user/"$USER" 2>/dev/null)
 	if [ $? -ne 0 ]; then
 		echo "ZFS dataset creation failed for $USER"
