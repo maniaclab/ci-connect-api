@@ -4,6 +4,9 @@
 #include <cstdlib>
 #include <string>
 
+///\return a timestamp rendered as a string with format "YYYY-mmm-DD HH:MM:SS UTC"
+std::string timestamp();
+
 ///Try to get the value of an enviroment variable and store it to a string object.
 ///If the variable was not set \p target will not be modified. 
 ///\tparam a type to which a C-string can be assigned

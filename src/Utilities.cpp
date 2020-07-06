@@ -8,6 +8,19 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+#ifdef CONNECT_SERVER
+#warning using boost
+#include <boost/date_time/posix_time/posix_time.hpp>
+
+std::string timestamp(){
+       auto now = boost::posix_time::microsec_clock::universal_time();
+       return to_simple_string(now)+" UTC";
+}
+#else
+//for the client timestamps are less imortant, and we really don't want a boost dependency
+std::string timestamp(){ return ""; }
+#endif
+
 bool fetchFromEnvironment(const std::string& name, std::string& target){
 	char* val=getenv(name.c_str());
 	if(val){

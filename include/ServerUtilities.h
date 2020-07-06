@@ -10,9 +10,6 @@
 #include "Entities.h"
 #include "Utilities.h"
 
-///\return a timestamp rendered as a string with format "YYYY-mmm-DD HH:MM:SS UTC"
-std::string timestamp();
-
 ///Construct a JSON error object
 ///\param message the explanation to include in the error
 ///\return a JSON object with a 'kind' of "Error"

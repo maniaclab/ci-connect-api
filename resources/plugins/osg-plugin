@@ -1,0 +1,60 @@
+#!/bin/sh
+
+set_default_project(){
+	PROJECT="$1"
+
+	echo "Setting $USER_NAME default project to $PROJECT" >> plugin.log
+	
+	if [ ! -d "$USER_HOME/.ciconnect" ]; then
+		mkdir "$USER_HOME/.ciconnect"
+	fi
+	echo "$PROJECT" > "$USER_HOME/.ciconnect/defaultproject.new"
+	chown -R "$USER_NAME": "$USER_HOME/.ciconnect"
+	mv "$USER_HOME/.ciconnect/defaultproject.new" "$USER_HOME/.ciconnect/defaultproject"
+}
+
+if [ "$#" -lt 1 ]; then
+	echo "Command required" 1>&2
+	exit 1
+fi
+
+COMMAND="$1"
+shift # make remaining arguments more convenient to access
+
+case $COMMAND in
+	SUPPORTED_COMMANDS )
+		# Report the other commands supported by this plugin.
+		# This plugin only cares about new and updated users.
+		echo ADD_USER UPDATE_USER
+		;;
+	ADD_USER | UPDATE_USER )
+		USER_NAME="$1"
+		USER_HOME="$2"
+		USER_FULLNAME="$3"
+		USER_EMAIL="$4"
+		USER_PHONE="$5"
+		USER_INSTITUTION="$6"
+		
+		# Get all groups to which the user belongs, one per line
+		GROUPS=$(id -nG "$USER_NAME" | tr ' ' '\n')
+
+		# Select only the group names which are OSG 'projects'
+		# These must be subgroups of osg, and must not be or be subgroups of osg.login-nodes
+		PROJECTS=$(echo "$GROUPS" | sed -n -e '/^osg\.login-nodes/d' -e '/^osg\./p' | sort)
+
+		DEF_PATH="${USER_HOME}/.ciconnect/defaultproject"
+
+		if [ -f "$DEF_PATH" ]; then
+			# File already exists, check that it contains something valid
+			if [ $(echo "$PROJECTS" | join -v2 - "$DEF_PATH" ) ]; then
+				# Current file contents do not mathc any project to which th e user belongs
+				# Overwrite with something valid
+				set_default_project $(echo "$PROJECTS" | head -n 1)
+			fi
+		else
+			# Arbitrarily pick the first project to which the user belongs
+			set_default_project $(echo "$PROJECTS" | head -n 1)
+		fi
+
+		;;
+esac

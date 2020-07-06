@@ -1,0 +1,59 @@
+#!/bin/sh
+
+# This a useless plugin, for demonstration purposes which simply logs everything 
+# which happens. 
+
+if [ "$#" -lt 1 ]; then
+	echo "Command required" 1>&2
+	exit 1
+fi
+
+COMMAND="$1"
+shift # make remaining arguments more convenient to access
+
+case $COMMAND in
+	SUPPORTED_COMMANDS )
+		# Report the other commands supported by this plugin.
+		# This plugin supports them all, but any subset is valid.
+		echo START ADD_GROUP REMOVE_GROUP ADD_USER UPDATE_USER REMOVE_USER FINISH
+		;;
+	START )
+		echo "[$(date)] logger-plugin start" > plugin.log
+		;;
+	ADD_GROUP )
+		GROUP_NAME="$1"
+		GROUP_FULLNAME="$2"
+		GROUP_EMAIL="$3"
+		GROUP_PHONE="$4"
+		echo "[$(date)] Add group ${GROUP_NAME}" >> plugin.log
+		;;
+	REMOVE_GROUP )
+		GROUP_NAME="$1"
+		echo "[$(date)] Remove group ${GROUP_NAME}" >> plugin.log
+		;;
+	ADD_USER )
+		USER_NAME="$1"
+		USER_HOME="$2"
+		USER_FULLNAME="$3"
+		USER_EMAIL="$4"
+		USER_PHONE="$5"
+		USER_INSTITUTION="$6"
+		echo "[$(date)] Add user ${USER_NAME}" >> plugin.log
+		;;
+	UPDATE_USER )
+		USER_NAME="$1"
+		USER_HOME="$2"
+		USER_FULLNAME="$3"
+		USER_EMAIL="$4"
+		USER_PHONE="$5"
+		USER_INSTITUTION="$6"
+		echo "[$(date)] Update user ${USER_NAME}" >> plugin.log
+		;;
+	REMOVE_USER )
+		USER_NAME="$1"
+		echo "[$(date)] Remove user ${USER_NAME}" >> plugin.log
+		;;
+	FINISH )
+		echo "[$(date)] logger-plugin finish" >> plugin.log
+		;;
+esac

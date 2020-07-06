@@ -3,9 +3,9 @@
 
 #include <iostream>
 #include <sstream>
+#include <thread>
 
 #include "Utilities.h"
-#include "ServerUtilities.h"
 
 struct logTarget{
 	std::ostream& stream;

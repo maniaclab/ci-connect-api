@@ -1,5 +1,5 @@
-cmake_minimum_required (VERSION 3.0.0 FATAL_ERROR)
-cmake_policy(VERSION 3.0.0)
+cmake_minimum_required (VERSION 3.10.0 FATAL_ERROR)
+cmake_policy(VERSION 3.10.0)
 
 SET(CMAKE_CXX_STANDARD 11)
 SET(CMAKE_C_STANDARD 11)
@@ -23,6 +23,9 @@ endif(APPLE)
 #if(NOT DEFINED BUILD_CLIENT)
 #  set(BUILD_CLIENT True)
 #endif()
+if(NOT DEFINED BUILD_PROVISIONER)
+  set(BUILD_PROVISIONER True)
+endif()
 if(NOT DEFINED BUILD_SERVER)
   set(BUILD_SERVER True)
 endif()
@@ -44,6 +47,9 @@ endif()
 #if(BUILD_CLIENT)
 #  message("Will build client")
 #endif()
+if(BUILD_PROVISIONER)
+  message("Will build account provisioner")
+endif()
 if(BUILD_SERVER)
   message("Will build server")
   if(BUILD_SERVER_TESTS)
@@ -92,6 +98,68 @@ endif()
 add_custom_target(embed_version
   DEPENDS ${EMBED_VERSION_DEPS} ${CMAKE_SOURCE_DIR}/cmake/embed_version.sh
 )
+
+# -----------------------------------------------------------------------------
+# Account provisioner executable
+if(BUILD_PROVISIONER)
+  LIST(APPEND PROVISIONER_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/sync_users.cpp
+    ${CMAKE_SOURCE_DIR}/src/Entities.cpp
+    ${CMAKE_SOURCE_DIR}/src/HTTPRequests.cpp
+    ${CMAKE_SOURCE_DIR}/src/Logging.cpp
+    ${CMAKE_SOURCE_DIR}/src/Process.cpp
+    ${CMAKE_SOURCE_DIR}/src/Utilities.cpp
+  )
+  add_executable(sync_users ${PROVISIONER_SOURCES})
+  target_include_directories(sync_users
+    PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    ${CURL_INCLUDE_DIRS}
+    ${LIBCRYPTO_CFLAGS}
+    ${SSL_CFLAGS}
+  )
+  if(STATIC_PROVISIONER)
+    if(APPLE)
+      message("Attempting partially static link")
+      set(PROVISIONER_LIBRARIES
+        ${CURL_LIBRARIES}
+        z
+        pthread
+      )
+    else(APPLE) # assume anything which is not Apple is Linux
+      message("Attempting fully static link")
+      set(PROVISIONER_LIBRARIES
+        -static
+        -static-libstdc++
+        -static-libgcc
+        ${CURL_LIBRARIES}
+        nghttp2
+        ${SSL_LDFLAGS}
+        ${LIBCRYPTO_LDFLAGS}
+        ssh2
+        z
+        pthread
+      )
+    endif()
+  else(STATIC_PROVISIONER)
+    set(PROVISIONER_LIBRARIES
+      ${CURL_LIBRARIES}
+      ${SSL_LDFLAGS}
+      ${LIBCRYPTO_LDFLAGS}
+      z
+      pthread
+    )
+  endif()
+
+  target_link_libraries(sync_users
+    PUBLIC
+      ${PROVISIONER_LIBRARIES}
+  )
+  target_compile_options(sync_users PRIVATE -DRAPIDJSON_HAS_STDSTRING -Os -std=c++11)
+  
+  LIST(APPEND RPM_SOURCES ${PROVISIONER_SOURCES})
+
+endif()
 
 ## -----------------------------------------------------------------------------
 ## Client executable
@@ -194,7 +262,9 @@ if(BUILD_SERVER)
     ${LIBCRYPTO_CFLAGS}
     ${SSL_CFLAGS}
     -DRAPIDJSON_HAS_STDSTRING
+    -DCONNECT_SERVER
     -O2
+    -std=c++11
   )
   
   add_library(ci-connect-server STATIC ${SERVER_SOURCES})
@@ -223,7 +293,7 @@ if(BUILD_SERVER)
   add_dependencies(ci-connect-server embed_version)
   
   add_executable(ci-connect-service ${CMAKE_SOURCE_DIR}/src/ciconnect_service.cpp)
-  target_compile_options(ci-connect-service PRIVATE -DRAPIDJSON_HAS_STDSTRING)
+  target_compile_options(ci-connect-service PRIVATE -DRAPIDJSON_HAS_STDSTRING -DCONNECT_SERVER -std=c++11)
   target_link_libraries(ci-connect-service ci-connect-server)
   install(TARGETS ci-connect-service RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
   # TODO: uninstall

@@ -1,13 +1,6 @@
 #include "ServerUtilities.h"
 
-#include <boost/date_time/posix_time/posix_time.hpp>
-
 #include "Logging.h"
-
-std::string timestamp(){
-	auto now = boost::posix_time::microsec_clock::universal_time();
-	return to_simple_string(now)+" UTC";
-}
 
 std::string generateError(const std::string& message){
 	rapidjson::Document err(rapidjson::kObjectType);
