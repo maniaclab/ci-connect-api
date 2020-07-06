@@ -121,8 +121,14 @@ struct ExtendedUser : public User{
 	///\return the user's group memberships serialized as a comma separated string of group names
 	std::string membershipsAsList() const{
 		std::ostringstream ss;
-		for(const GroupMembership& gm : memberships)
-			ss << gm.groupName << ',';
+		bool first=true;
+		for(const GroupMembership& gm : memberships){
+			if(first)
+				first=false;
+			else
+				ss << ',';
+			ss << gm.groupName;
+		}
 		return ss.str();
 	}
 	
@@ -383,8 +389,6 @@ public:
 	bool updateUser(const ExtendedUser& user, const std::string& homeDir) override{ return setUserSSHKeys(user,homeDir); }
 private:
 	bool setUserSSHKeys(const ExtendedUser& user, const std::string& homeDir) const{
-		std::cout << "Updating " << user.unixName << " SSH keys in " << homeDir << "/.ssh/authorized_keys" << std::endl;
-		
 		//first make sure the home directory is where we expect it to be
 		struct stat info;
 		int err=stat(homeDir.c_str(),&info);
@@ -502,6 +506,18 @@ public:
 		std::string groups=user.membershipsAsList();
 		std::cout << "Creating user " << user.unixName << " with uid " << user.unixID << " and groups " << groups << std::endl;
 		if(!dryRun){
+			std::vector<std::string> addUserArgs={
+                                "-c",user.name, //set full name
+                                "-u",std::to_string(user.unixID), //set uid
+                                "-m","-b",homeDirRoot, //create a home directory
+                                "-N","-g",user.defaultGroup(), //set the default group
+                                "-G",groups, //set additional groups
+                                user.unixName
+                        };
+			std::cout << "Create args:";
+			for(auto arg : addUserArgs)
+				std::cout << ' ' << arg;
+			std::cout << std::endl;
 			auto result=runCommand("useradd",{
 				"-c",user.name, //set full name
 				"-u",std::to_string(user.unixID), //set uid
@@ -529,7 +545,7 @@ public:
 	bool addGroup(const Group& group){
 		std::cout << "Creating group " << group.name << " with gid " << group.unixID << std::endl;
 		if(!dryRun){
-			auto result=runCommand("groupadd",{group.name,std::to_string(group.unixID)});
+			auto result=runCommand("groupadd",{group.name,"-g",std::to_string(group.unixID)});
 			if(result.status!=0){
 				log_error("Failed to create group " << group.name << ": Error " << result.status << " " << result.error);
 				return false;
@@ -583,6 +599,7 @@ public:
 		std::cout << "Updating " << user.unixName << " group memberships to " << groups << std::endl;
 		if(!dryRun){
 			auto modResult=runCommand("usermod",{
+				user.unixName,
 				"-c",user.name,
 				"-g",user.defaultGroup(),
 				"-G",groups
@@ -1104,8 +1121,7 @@ int main(int argc, char* argv[]){
 				return 1;
 			}
 		}
-		if(!config.plugins.empty())
-			startReaper();
+		startReaper();
 		
 		LockFile lock("connect_sync");
 		SystemState state("",config.dryRun,config.cleanHome,config.homeBase,config.plugins);
@@ -1176,14 +1192,17 @@ int main(int argc, char* argv[]){
 			   !std::equal(user.memberships.begin(),user.memberships.end(),existingMemberships.begin())){
 				//determine the groups the user should still be in, and serialize 
 				//them to a string as a comma separated list
-				std::ostringstream membershipsToKeep;
-				std::ostream_iterator<std::string> keepIt(membershipsToKeep,",");
+				std::ostringstream ss;
+				std::ostream_iterator<std::string> keepIt(ss,",");
 				std::set_intersection(existingMemberships.begin(),existingMemberships.end(),
 									  user.memberships.begin(),user.memberships.end(),
 									  keepIt);
-				std::cout << "Reducing " << user.unixName << " group memberships to " << membershipsToKeep.str() << std::endl; 
+				std::string membershipsToKeep=ss.str();
+				if(!membershipsToKeep.empty() && membershipsToKeep.back()==',')
+					membershipsToKeep.resize(membershipsToKeep.size()-1); //clip trailing comma
+				std::cout << "Reducing " << user.unixName << " group memberships to " << membershipsToKeep << std::endl; 
 				if(!config.dryRun){
-					auto modResult=runCommand("usermod",{"-G",membershipsToKeep.str()});
+					auto modResult=runCommand("usermod",{"-G",membershipsToKeep});
 					if(modResult.status!=0)
 						log_error("Failed to update group memberships for user " << user.unixName << ": " << modResult.error);
 				}

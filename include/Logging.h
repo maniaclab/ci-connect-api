@@ -2,6 +2,7 @@
 #define CONNECT_LOGGING_H
 
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <thread>
 

@@ -3,7 +3,7 @@
 set_default_project(){
 	PROJECT="$1"
 
-	echo "Setting $USER_NAME default project to $PROJECT" >> plugin.log
+	echo "Setting $USER_NAME default project to $PROJECT" >> osg.log
 	
 	if [ ! -d "$USER_HOME/.ciconnect" ]; then
 		mkdir "$USER_HOME/.ciconnect"
@@ -25,9 +25,13 @@ case $COMMAND in
 	SUPPORTED_COMMANDS )
 		# Report the other commands supported by this plugin.
 		# This plugin only cares about new and updated users.
-		echo ADD_USER UPDATE_USER
+		echo START ADD_USER UPDATE_USER
+		;;
+	START )
+		cat /dev/null > osg.log
 		;;
 	ADD_USER | UPDATE_USER )
+		echo "$COMMAND $USER_NAME" >> osg.log
 		USER_NAME="$1"
 		USER_HOME="$2"
 		USER_FULLNAME="$3"
@@ -36,11 +40,11 @@ case $COMMAND in
 		USER_INSTITUTION="$6"
 		
 		# Get all groups to which the user belongs, one per line
-		GROUPS=$(id -nG "$USER_NAME" | tr ' ' '\n')
+		USER_GROUPS=$(id -nG "$USER_NAME" | tr ' ' '\n')
 
 		# Select only the group names which are OSG 'projects'
 		# These must be subgroups of osg, and must not be or be subgroups of osg.login-nodes
-		PROJECTS=$(echo "$GROUPS" | sed -n -e '/^osg\.login-nodes/d' -e '/^osg\./p' | sort)
+		PROJECTS=$(echo "$USER_GROUPS" | sed -n -e '/^osg\.login-nodes/d' -e '/^osg\./p' | sort)
 
 		DEF_PATH="${USER_HOME}/.ciconnect/defaultproject"
 
