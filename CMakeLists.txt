@@ -128,6 +128,23 @@ if(BUILD_PROVISIONER)
       )
     else(APPLE) # assume anything which is not Apple is Linux
       message("Attempting fully static link")
+      # Try to make sure we have a static curl library
+      foreach(LIB IN LISTS CURL_LIBRARIES)
+        get_filename_component(LIB_NAME "${LIB}" NAME)
+        if(LIB_NAME MATCHES ".so")
+          message(STATUS "Need to replace dynamic Curl library ${LIB}")
+          get_filename_component(LIB_DIR "${LIB}" DIRECTORY)
+          string(REPLACE "\.so.*" ".a" REPLACEMENT_LIB_NAME "$LIB_NAME")
+          message(STATUS "Searching for ${REPLACEMENT_LIB_NAME} in ${LIB_DIR}")
+          find_library(REPLACEMENT_LIB NAMES ${REPLACEMENT_LIB_NAME} PATHS ${LIB_DIR})
+          if(REPLACEMENT_LIB STREQUAL "REPLACEMENT_LIB-NOTFOUND")
+            message(FATAL_ERROR "Unable to find a static curl library")
+          endif()
+          set(LIB "${REPLACEMENT_LIB}")
+        endif()
+        LIST(APPEND NEW_CURL_LIBRARIES ${LIB})
+      endforeach()
+      set(CURL_LIBRARIES "${NEW_CURL_LIBRARIES}")
       set(PROVISIONER_LIBRARIES
         -static
         -static-libstdc++
