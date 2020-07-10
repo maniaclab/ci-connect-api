@@ -25,9 +25,14 @@
 #include "Process.h"
 #include "Utilities.h"
 
+///Define an ordering for group memberships
+///In this context we never mix memberships involving different users, so we
+///ignore how those should be ordered. 
 bool operator<(const GroupMembership& g1, const GroupMembership& g2){
 	return g1.groupName<g2.groupName;
 }
+///Quick and dirty way to compare memberships with strings. 
+///Also viable only because considering multiple users is not necessary.
 bool operator==(const GroupMembership& g1, const std::string& groupName){
 	return g1.groupName==groupName;
 }
@@ -115,7 +120,9 @@ struct ExtendedUser : public User{
 		valid=true;
 	}
 	
+	///All relevant groups to which the user belongs 
 	std::set<GroupMembership> memberships;
+	///Whether this user should be disabled on this host
 	bool disabled;
 	
 	///\return the user's group memberships serialized as a comma separated string of group names
@@ -132,13 +139,16 @@ struct ExtendedUser : public User{
 		return ss.str();
 	}
 	
+	///\return a group to which the user belongs which should be suitable as the
+	///        user's default
 	std::string defaultGroup() const{
+		if(memberships.empty()){ log_fatal("User " << unixName << " has no group memberships"); }
 		if(!memberships.empty())
 			//memberships are sorted by group name, and the first group name 
 			//will be a prefix, i.e. enclosing group, of at least some of the 
 			//following groups
 			return memberships.begin()->groupName;
-		return "";
+		return ""; //should be unreachable
 	}
 };
 
@@ -203,10 +213,9 @@ public:
 	///            within a standard directory
 	LockFile(std::string name):fullPath(
 #ifdef __linux__
-										"/var/lock/"
-#else
-										// /var/lock may not exist on non-linux systems
-										"/var/tmp/"
+	                                    "/var/lock/"
+#else // /var/lock may not exist on non-linux systems
+	                                    "/var/tmp/"
 #endif
 										+name){
 		//check whether the file aleady exists
@@ -253,28 +262,66 @@ private:
 	std::string fullPath;
 };
 
+///A wrapper for additional logic to be applied when managing users and groups.
+///Plug-ins may optionally act on any of several triggers such as creation or
+///deletion of users and groups. They cannot (or should not) alter the main
+///effects of provisioning, but may add additional side effects. 
 class Plugin{
 public:
+	///Invoked before modifications begin to be made
 	virtual bool start(){ return true; }
+	///Invoked when a group has just been created
+	///\param group the details of the newly created group
 	virtual bool addGroup(const Group& group){ return true; }
+	///Invoked when a group has just been deleted
+	///\param groupName the name of the group which was deleted
 	virtual bool removeGroup(const std::string& groupName){ return true; }
+	///Invoked when a user account has just been created
+	///\param user the details of the newly created user
+	///\param homeDir the path to the new user's home directory
 	virtual bool addUser(const ExtendedUser& user, const std::string& homeDir){ return true; }
+	///Invoked when a user account is updated with new data
+	///\param user the new details of the user
+	///\param homeDir the path to the user's home directory
 	virtual bool updateUser(const ExtendedUser& user, const std::string& homeDir){ return true; }
+	///Invoked when a user account has just been deleted
+	///\param userName the name of the user which was deleted
 	virtual bool removeUser(const std::string& userName){ return true; }
+	///Invoked after modifications are otherwise completed
 	virtual bool finish(){ return true; }
 };
 
-//Plugin Interface:
-//plugin SUPPORTED_COMMANDS
-//plugin START
-//plugin ADD_GROUP group_name group_full_name group_email group_phone
-//plugin REMOVE_GROUP group_name
-//plugin ADD_USER user_name user_home_dir user_full_name user_email user_phone user_institution
-//plugin UPDATE_USER user_name user_home_dir user_full_name user_email user_phone user_institution
-//plugin REMOVE_USER user_name
-//plugin FINISH
+///A plug-in which is implemented as an external executable.
+///This class will invoke the executable to determine which customization points
+///it implements, and then invoke it for each of those customization points. 
+///The executable interface is expected to use simple textual arguments, where 
+///the first argument passed (after the executable name) will always be a 
+///command, which may then be followed by additional arguments relevant to that 
+///context. The exit status of the plug-in executable is checked after each 
+///invocation, with zero being treated as success and all other values as 
+///failure.
+///
+///Plug-in Interface:
+///plug-in SUPPORTED_COMMANDS
+///        This should write a whitespace separated list of other commands which 
+///        the plug-in supports to standard output. 
+///plug-in START
+///        Invoked before modifications begin to be made
+///plug-in ADD_GROUP group_name group_full_name group_email group_phone
+///        Invoked when a group has just been created
+///plug-in REMOVE_GROUP group_name
+///        Invoked when a group has just been deleted
+///plug-in ADD_USER user_name user_home_dir user_full_name user_email user_phone user_institution
+///        Invoked when a user account has just been created
+///plug-in UPDATE_USER user_name user_home_dir user_full_name user_email user_phone user_institution
+///        Invoked when a user account is updated with new data
+///plug-in REMOVE_USER user_name
+///        Invoked when a user account has just been deleted
+///plug-in FINISH
+///        Invoked after modifications are otherwise completed
 class ExternalPlugin : public Plugin{
 public:
+	///\param plugin the external executable to invoke
 	explicit ExternalPlugin(std::string plugin):
 	name(plugin),
 	usesStart(false), 
@@ -282,18 +329,19 @@ public:
 	usesAddUser(false), usesUpdateUser(false), usesRemoveUser(false), 
 	usesFinish(false)
 	{
+		//check what commands the plug-in supports
 		commandResult supported;
 		try{
 			supported=runCommand(name,{"SUPPORTED_COMMANDS"});
 		}catch(std::runtime_error& ex){
-			log_fatal("Failed to initialize plugin " << name << ": " << ex.what());
+			log_fatal("Failed to initialize plug-in " << name << ": " << ex.what());
 		}
 		if(supported.status!=0)
-			throw std::runtime_error("Failed to query commands supported by the '"+name+"' plugin");
+			throw std::runtime_error("Failed to query commands supported by the '"+name+"' plug-in");
 		std::istringstream ss(supported.output);
 		std::string command;
 		while(ss >> command){
-			log_info("Plugin " << name << " supports " << command);
+			//log_info("Plug-in " << name << " supports " << command);
 			if(command=="START")
 				usesStart=true;
 			else if(command=="ADD_GROUP")
@@ -309,7 +357,7 @@ public:
 			else if(command=="FINISH")
 				usesFinish=true;
 			else
-				log_error(name << " plugin claims to support the unknown command '" << command << "'");
+				log_error(name << " plug-in claims to support the unknown command '" << command << "'");
 		}
 	}
 	
@@ -318,7 +366,7 @@ public:
 			return true;
 		auto result=runCommand(name,{"START"});
 		if(result.status!=0)
-			log_error("Plugin " << name << ": START failed: " << result.error);
+			log_error("Plug-in " << name << ": START failed: " << result.error);
 		return result.status==0; 
 	}
 	
@@ -327,7 +375,7 @@ public:
 			return true;
 		auto result=runCommand(name,{"ADD_GROUP",group.name,group.displayName,group.email,group.phone});
 		if(result.status!=0)
-			log_error("Plugin " << name << ": ADD_GROUP failed: " << result.error);
+			log_error("Plug-in " << name << ": ADD_GROUP failed: " << result.error);
 		return result.status==0; 
 	}
 	
@@ -336,7 +384,7 @@ public:
 			return true;
 		auto result=runCommand(name,{"REMOVE_GROUP",groupName});
 		if(result.status!=0)
-			log_error("Plugin " << name << ": REMOVE_GROUP failed: " << result.error);
+			log_error("Plug-in " << name << ": REMOVE_GROUP failed: " << result.error);
 		return result.status==0; 
 	}
 	
@@ -345,7 +393,7 @@ public:
 			return true;
 		auto result=runCommand(name,{"ADD_USER",user.unixName,homeDir,user.name,user.email,user.phone,user.institution});
 		if(result.status!=0)
-			log_error("Plugin " << name << ": ADD_USER failed: " << result.error);
+			log_error("Plug-in " << name << ": ADD_USER failed: " << result.error);
 		return result.status==0; 
 	}
 	
@@ -354,7 +402,7 @@ public:
 			return true;
 		auto result=runCommand(name,{"UPDATE_USER",user.unixName,homeDir,user.name,user.email,user.phone,user.institution});
 		if(result.status!=0)
-			log_error("Plugin " << name << ": UPDATE_USER failed: " << result.error);
+			log_error("Plug-in " << name << ": UPDATE_USER failed: " << result.error);
 		return result.status==0; 
 	}
 	
@@ -363,7 +411,7 @@ public:
 			return true;
 		auto result=runCommand(name,{"REMOVE_USER",userName});
 		if(result.status!=0)
-			log_error("Plugin " << name << ": REMOVE_USER failed: " << result.error);
+			log_error("Plug-in " << name << ": REMOVE_USER failed: " << result.error);
 		return result.status==0; 
 	}
 	
@@ -372,22 +420,26 @@ public:
 			return true;
 		auto result=runCommand(name,{"FINISH"});
 		if(result.status!=0)
-			log_error("Plugin " << name << ": FINISH failed: " << result.error);
+			log_error("Plug-in " << name << ": FINISH failed: " << result.error);
 		return result.status==0; 
 	}
 	
 private:
+	///The executable for this plug-in
 	std::string name;
 	bool usesStart, usesAddGroup, usesRemoveGroup, usesAddUser, usesUpdateUser, usesRemoveUser, usesFinish; 
 };
 
-///A plugin which sets users' public SSH keys to allow interactive logins.
-///This plugin is probably always desirable, so include it as a built-in
+///A plug-in which sets users' public SSH keys to allow interactive logins.
+///This plug-in is probably always desirable, so it is built in. 
 class SshPlugin : public Plugin{
 public:
+	///Set authorized keys when each user is created
 	bool addUser(const ExtendedUser& user, const std::string& homeDir) override{ return setUserSSHKeys(user,homeDir); }
+	///Update each users' authorized keys on every subsequent update
 	bool updateUser(const ExtendedUser& user, const std::string& homeDir) override{ return setUserSSHKeys(user,homeDir); }
 private:
+	///Write a user's public keys to ~/.ssh/authorized_keys
 	bool setUserSSHKeys(const ExtendedUser& user, const std::string& homeDir) const{
 		//first make sure the home directory is where we expect it to be
 		struct stat info;
@@ -472,8 +524,10 @@ public:
 			dataPrefix+='/';
 		readExistingUsers();
 		readExistingGroups();
-		sanityCheckExistingUsers();
+		sanityCheckExistingRecords("/etc/passwd", existingUsers, "User");
+		sanityCheckExistingRecords("/etc/group", existingGroups, "Group");
 		
+		//insert the SSH plug-in before any user-specified ones
 		plugins.emplace_back(new SshPlugin);
 		for(const auto& pluginName : pluginNames)
 			plugins.emplace_back(new ExternalPlugin(pluginName));
@@ -506,18 +560,6 @@ public:
 		std::string groups=user.membershipsAsList();
 		std::cout << "Creating user " << user.unixName << " with uid " << user.unixID << " and groups " << groups << std::endl;
 		if(!dryRun){
-			std::vector<std::string> addUserArgs={
-                                "-c",user.name, //set full name
-                                "-u",std::to_string(user.unixID), //set uid
-                                "-m","-b",homeDirRoot, //create a home directory
-                                "-N","-g",user.defaultGroup(), //set the default group
-                                "-G",groups, //set additional groups
-                                user.unixName
-                        };
-			std::cout << "Create args:";
-			for(auto arg : addUserArgs)
-				std::cout << ' ' << arg;
-			std::cout << std::endl;
 			auto result=runCommand("useradd",{
 				"-c",user.name, //set full name
 				"-u",std::to_string(user.unixID), //set uid
@@ -616,17 +658,19 @@ public:
 		}
 	}
 	
-	///Check that the existing users list is correct, at least to the extent 
-	///that all listed users do exist
-	bool sanityCheckExistingUsers(){
-		std::ifstream passwd("/etc/passwd");
-		if(!passwd){
-			log_error("Unable to read /etc/passwd");
-			return false;
-		}
+	///Check that a list of existing objects is correct by comparing with what the OS has on record
+	///\param sysFile the path to the OS file to read, usually /etc/passwd
+	///\param existingRecords our own list to cross check
+	///\param objName type of object being checked, to use in error messages
+	bool sanityCheckExistingRecords(const std::string& sysFile, 
+	                                std::set<std::string>& existingRecords, 
+	                                std::string objName){
+		std::ifstream sys(sysFile);
+		if(!sys)
+			log_fatal("Unable to read " << sysFile);
 		std::string line;
-		std::set<std::string> foundAccounts;
-		while(std::getline(passwd,line)){
+		std::set<std::string> foundRecords;
+		while(std::getline(sys,line)){
 			//skip comments
 			auto pos=line.find('#');
 			if(pos!=std::string::npos)
@@ -635,17 +679,17 @@ public:
 			pos=line.find(':');
 			if(pos==std::string::npos || pos==0)
 				continue;
-			foundAccounts.insert(line.substr(0,pos));
+			foundRecords.insert(line.substr(0,pos));
 		}
-		std::vector<std::string> missingUsers;
-		std::set_difference(existingUsers.begin(),existingUsers.end(),
-							foundAccounts.begin(),foundAccounts.end(),
-							std::back_inserter(missingUsers));
-		for(auto user : missingUsers){
-			log_error("User " << user << " is expected to exist, but does not");
-			existingUsers.erase(user); //remove bogus record
+		std::vector<std::string> missingRecords;
+		std::set_difference(existingRecords.begin(),existingRecords.end(),
+							foundRecords.begin(),foundRecords.end(),
+							std::back_inserter(missingRecords));
+		for(auto record : missingRecords){
+			log_error(objName << ' ' << record << " is expected to exist, but does not");
+			existingRecords.erase(record); //remove bogus record
 		}
-		return missingUsers.empty();
+		return missingRecords.empty();
 	}
 	
 private:
@@ -712,7 +756,6 @@ private:
 ///\return a list of groups, sorted by name
 std::vector<Group> fetchGroups(std::string sourceGroup, std::string apiEndpoint, std::string apiToken){
 	std::string prefixToRemove=computeGroupPrefixToRemove(sourceGroup);
-	std::cout << "Group prefix to remove is " << prefixToRemove << std::endl;
 	
 	auto extractGroup=[&prefixToRemove](const rapidjson::Value& data)->Group{
 		Group g;
@@ -1139,9 +1182,8 @@ int main(int argc, char* argv[]){
 		}
 		
 		//download the latest state to synchronize
-		//TODO: naming is confusing, think of better
-		auto currentGroups = fetchGroups(config.groupGroup,config.apiEndpoint,config.apiToken);
-		auto currentUsers = fetchUsers(config.userGroup,config.apiEndpoint,config.apiToken,config.groupGroup);
+		auto expectedGroups = fetchGroups(config.groupGroup,config.apiEndpoint,config.apiToken);
+		auto expectedUsers = fetchUsers(config.userGroup,config.apiEndpoint,config.apiToken,config.groupGroup);
 		
 		//Group memberships are a bit tricky, sisnce the system will not let us 
 		//delete a group with members, or add a user to a group which does not 
@@ -1160,7 +1202,7 @@ int main(int argc, char* argv[]){
 		//be removed
 		std::vector<std::string> usersToDelete;
 		std::set_difference(state.getExistingUsers().begin(),state.getExistingUsers().end(),
-							currentUsers.begin(),currentUsers.end(),
+							expectedUsers.begin(),expectedUsers.end(),
 							std::back_inserter(usersToDelete));
 		for(auto defunctUser : usersToDelete)
 			state.removeUser(defunctUser);
@@ -1168,7 +1210,7 @@ int main(int argc, char* argv[]){
 		//Figure out which users already exist and merely need to have their 
 		//details synchronized
 		std::vector<ExtendedUser> usersToUpdate;
-		std::set_intersection(currentUsers.begin(),currentUsers.end(), //outputs drawn from first range
+		std::set_intersection(expectedUsers.begin(),expectedUsers.end(), //outputs drawn from first range
 							  state.getExistingUsers().begin(),state.getExistingUsers().end(),
 							  std::back_inserter(usersToUpdate));
 		
@@ -1213,14 +1255,14 @@ int main(int argc, char* argv[]){
 		//all existing groups which are not still in the current group list must be removed
 		std::vector<std::string> groupsToDelete;
 		std::set_difference(state.getExistingGroups().begin(),state.getExistingGroups().end(),
-							currentGroups.begin(),currentGroups.end(),
+							expectedGroups.begin(),expectedGroups.end(),
 							std::back_inserter(groupsToDelete));
 		for(auto defunctGroup : groupsToDelete)
 			state.removeGroup(defunctGroup);
 		
 		//Create all groups which should exist and don't
 		std::vector<Group> groupsToCreate;
-		std::set_difference(currentGroups.begin(),currentGroups.end(),
+		std::set_difference(expectedGroups.begin(),expectedGroups.end(),
 							state.getExistingGroups().begin(),state.getExistingGroups().end(),
 							std::back_inserter(groupsToCreate));
 		for(const auto& group : groupsToCreate)
@@ -1228,7 +1270,7 @@ int main(int argc, char* argv[]){
 		
 		//Create all users which should exist and don't
 		std::vector<ExtendedUser> usersToCreate;
-		std::set_difference(currentUsers.begin(),currentUsers.end(),
+		std::set_difference(expectedUsers.begin(),expectedUsers.end(),
 							state.getExistingUsers().begin(),state.getExistingUsers().end(),
 							std::back_inserter(usersToCreate));
 		for(const auto& user : usersToCreate){
