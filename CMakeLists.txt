@@ -158,6 +158,8 @@ if(BUILD_PROVISIONER)
         pthread
       )
     endif()
+    # strip symbols to reduce binary size
+    set_target_properties(sync_users PROPERTIES LINK_FLAGS_RELEASE -s)
   else(STATIC_PROVISIONER)
     set(PROVISIONER_LIBRARIES
       ${CURL_LIBRARIES}
