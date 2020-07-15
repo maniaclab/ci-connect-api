@@ -618,15 +618,32 @@ crow::response deleteGroup(PersistentStore& store, const crow::request& req, std
 	
 	if(!targetGroup)
 		return crow::response(404,generateError("Group not found"));
-		
+	
 	//collect all members of the group before deleting it
 	auto memberships=store.getMembersOfGroup(targetGroup.name);
 	//figure out parent group
 	const Group parentGroup=store.getGroup(enclosingGroup(groupName));
 	
+	log_info("Deleting " << targetGroup << " subgroups");
+	std::string filterPrefix=groupName+".";
+	//collect names of all subgroups
+	std::vector<std::string> subgroups;
+	for (const Group& group : store.listGroups()){
+		if(group.name.find(filterPrefix)!=0)
+			continue;
+		subgroups.push_back(group.name);
+	}
+	//sort in reverse order so that we delete foo.bar.baz before foo.bar, etc.
+	std::sort(subgroups.begin(),subgroups.end(),std::greater<std::string>{});
+	for(auto group : subgroups){
+		log_info("Deleting " << group);
+		bool deleted = store.removeGroup(group);
+		if (!deleted)
+			return crow::response(500, generateError("Group deletion failed"));
+	}
+	
 	log_info("Deleting " << targetGroup);
 	bool deleted = store.removeGroup(targetGroup.name);
-
 	if (!deleted)
 		return crow::response(500, generateError("Group deletion failed"));
 	
