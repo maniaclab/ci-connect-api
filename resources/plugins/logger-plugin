@@ -38,6 +38,8 @@ case $COMMAND in
 		USER_EMAIL="$4"
 		USER_PHONE="$5"
 		USER_INSTITUTION="$6"
+		USER_SSH_KEY="$7"
+		USER_X509_DN="$8"
 		echo "[$(date)] Add user ${USER_NAME}" >> plugin.log
 		;;
 	UPDATE_USER )
@@ -47,6 +49,8 @@ case $COMMAND in
 		USER_EMAIL="$4"
 		USER_PHONE="$5"
 		USER_INSTITUTION="$6"
+		USER_SSH_KEY="$7"
+		USER_X509_DN="$8"
 		echo "[$(date)] Update user ${USER_NAME}" >> plugin.log
 		;;
 	REMOVE_USER )

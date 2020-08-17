@@ -31,6 +31,9 @@
         "public_key": {
           "type": "string"
         },
+        "X.509_DN": {
+          "type": "string"
+        },
         "unix_name":{
           "type": "string"
         },

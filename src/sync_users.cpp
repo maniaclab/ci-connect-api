@@ -88,6 +88,10 @@ struct ExtendedUser : public User{
 			log_fatal("User metadata does not have a public_key property or it is not a string");
 		sshKey = userData["metadata"]["public_key"].GetString();
 		
+		if(!userData["metadata"].HasMember("X.509_DN") || !userData["metadata"]["X.509_DN"].IsString())
+			log_fatal("User metadata does not have an X.509_DN property or it is not a string");
+		x509DN = userData["metadata"]["X.509_DN"].GetString();
+		
 		if(!userData["metadata"].HasMember("unix_id") || !userData["metadata"]["unix_id"].IsInt())
 			log_fatal("User metadata does not have a unix_id property or it is not an integer");
 		unixID = userData["metadata"]["unix_id"].GetInt();
@@ -391,7 +395,7 @@ public:
 	bool addUser(const ExtendedUser& user, const std::string& homeDir) override{
 		if(!usesAddUser)
 			return true;
-		auto result=runCommand(name,{"ADD_USER",user.unixName,homeDir,user.name,user.email,user.phone,user.institution});
+		auto result=runCommand(name,{"ADD_USER",user.unixName,homeDir,user.name,user.email,user.phone,user.institution,user.sshKey,user.x509DN});
 		if(result.status!=0)
 			log_error("Plug-in " << name << ": ADD_USER failed: " << result.error);
 		return result.status==0; 
@@ -400,7 +404,7 @@ public:
 	bool updateUser(const ExtendedUser& user, const std::string& homeDir) override{
 		if(!usesUpdateUser)
 			return true;
-		auto result=runCommand(name,{"UPDATE_USER",user.unixName,homeDir,user.name,user.email,user.phone,user.institution});
+		auto result=runCommand(name,{"UPDATE_USER",user.unixName,homeDir,user.name,user.email,user.phone,user.institution,user.sshKey,user.x509DN});
 		if(result.status!=0)
 			log_error("Plug-in " << name << ": UPDATE_USER failed: " << result.error);
 		return result.status==0; 

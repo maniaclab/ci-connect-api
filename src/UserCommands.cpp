@@ -297,6 +297,10 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 		log_warn("User public key in user creation request was not a string");
 		return crow::response(400,generateError("Incorrect type for user public key"));
 	}
+	if(body["metadata"].HasMember("X.509_DN") && !body["metadata"]["X.509_DN"].IsString()){
+		log_warn("User X.509 DN in user creation request was not a string");
+		return crow::response(400,generateError("Incorrect type for user X.509 DN"));
+	}
 	if(!body["metadata"].HasMember("unix_name")){
 		log_warn("User creation request was missing user unix name");
 		return crow::response(400,generateError("Missing user unix name in request"));
@@ -364,6 +368,17 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	}
 	else
 		targetUser.sshKey=" "; //dummy data to keep dynamo happy
+	if(body["metadata"].HasMember("X.509_DN")){
+		targetUser.x509DN=body["metadata"]["X.509_DN"].GetString();
+		if(targetUser.sshKey.empty())
+			targetUser.x509DN=" "; //dummy data to keep dynamo happy
+		/*else if(!validateX509DN(targetUser.x509DN)){ //no validation is currently implemented
+			log_warn("Malformed X.509 DN(s)");
+			return crow::response(400,generateError("Malformed X.509 DN(s)"));
+		}*/
+	}
+	else
+		targetUser.x509DN=" "; //dummy data to keep dynamo happy
 	targetUser.unixName=body["metadata"]["unix_name"].GetString();
 	if(targetUser.unixName.empty()){
 		log_warn("User unixName was empty");
@@ -434,6 +449,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	metadata.AddMember("institution", targetUser.institution, alloc);
 	metadata.AddMember("access_token", targetUser.token, alloc);
 	metadata.AddMember("public_key", targetUser.sshKey, alloc);
+	metadata.AddMember("X.509_DN", targetUser.x509DN, alloc);
 	metadata.AddMember("join_date", targetUser.joinDate, alloc);
 	metadata.AddMember("last_use_time", targetUser.lastUseTime, alloc);
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
@@ -490,6 +506,10 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 		metadata.AddMember("public_key", targetUser.sshKey, alloc);
 	else
 		metadata.AddMember("public_key", "", alloc);
+	if(targetUser.x509DN!=" ")
+		metadata.AddMember("X.509_DN", targetUser.x509DN, alloc);
+	else
+		metadata.AddMember("X.509_DN", "", alloc);
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
 	metadata.AddMember("unix_id", targetUser.unixID, alloc);
 	metadata.AddMember("join_date", targetUser.joinDate, alloc);
@@ -576,6 +596,17 @@ crow::response updateUser(PersistentStore& store, const crow::request& req, cons
 			log_warn("Malformed SSH key(s)");
 			return crow::response(400,generateError("Malformed SSH key(s)"));
 		}
+	}
+	if(body["metadata"].HasMember("X.509_DN")){
+		if(!body["metadata"]["X.509_DN"].IsString())
+			return crow::response(400,generateError("Incorrect type for user X.509 DN"));
+		updatedUser.x509DN=body["metadata"]["X.509_DN"].GetString();
+		if(updatedUser.x509DN.empty())
+			updatedUser.x509DN=" ";
+		/*else if(!validateX509DN(targetUser.x509DN)){ //no validation is currently implemented
+			log_warn("Malformed X.509 DN(s)");
+			return crow::response(400,generateError("Malformed X.509 DN(s)"));
+		}*/
 	}
 	if(body["metadata"].HasMember("superuser")){
 		if(!body["metadata"]["superuser"].IsBool())

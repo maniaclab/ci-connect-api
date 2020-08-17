@@ -33,6 +33,9 @@
         "public_key": {
           "type": "string"
         },
+        "X.509_DN": {
+          "type": "string"
+        },
         "unix_name": {
           "type": "string"
         },
@@ -68,7 +71,7 @@
           }
         }
       },
-      "required": ["id","name","email","phone","institution","access_token","public_key","unix_name","unix_id","superuser","service_account","join_date"]
+      "required": ["id","name","email","phone","institution","access_token","public_key","X.509_DN","unix_name","unix_id","superuser","service_account","join_date"]
     }
   },
   "required": ["apiVersion","kind","metadata"]

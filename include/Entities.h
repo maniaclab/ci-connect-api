@@ -23,6 +23,7 @@ struct User{
 	std::string token;
 	std::string globusID;
 	std::string sshKey;
+	std::string x509DN;
 	std::string joinDate;
 	std::string lastUseTime;
 	unsigned int unixID;
