@@ -535,7 +535,7 @@ for USER in $USERS_TO_CREATE; do
 			set_osg_disk_quotas "$USER"
 		elif [ "$GROUP_ROOT_GROUP" == "root.cms" ]; then
 			set_stash_disk "$USER"
-		elif [ "$GROUP_ROOT_GROUP" == "root.duke" -o "$GROUP_ROOT_GROUP" == "root.uchicago" -o "$GROUP_ROOT_GROUP" == "root.veritas" ]; then
+		elif [ "$GROUP_ROOT_GROUP" == "root.duke" -o "$GROUP_ROOT_GROUP" == "root.uchicago" -o "$GROUP_ROOT_GROUP" == "root.veritas" -o "$GROUP_ROOT_GROUP" == "root.snowmass21" ]; then
 			set_collab_disk "$USER"
 		fi
 		# SPT specific: Create user directories on sptlocal.grid.uchicago.edu and xenon-dcache-head.grid.uchicago.edu only. Sorry...
