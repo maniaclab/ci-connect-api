@@ -1008,9 +1008,8 @@ struct Configuration{
 		{"group-group",groupGroup},
 		{"home-base",homeBase},
 		{"wipe",wipe},
-		{"clean-ome",cleanHome},
+		{"clean-home",cleanHome},
 		{"dry-run",dryRun},
-		{"help",help},
 	}
 	{
 		//check for environment variables
@@ -1025,7 +1024,7 @@ struct Configuration{
 		//interpret command line arguments
 		for(int i=1; i<argc; i++){
 			std::string arg(argv[i]);
-			if(arg=="-h" || arg=="-?"){
+			if(arg=="-h" || arg=="-?" || arg=="--help"){
 				help=true;
 				break;
 			}
@@ -1038,6 +1037,10 @@ struct Configuration{
 			if(options.count(optName)){
 				if(eqPos!=std::string::npos)
 					options.find(optName)->second=arg.substr(eqPos+1);
+				else if(options.find(optName)->second.type==ParamRef::Bool){
+					//treat boolean flags without an explicit value as true
+					options.find(optName)->second.b.get()=true;
+				}
 				else{
 					if(i==argc-1)
 						log_fatal("Missing value after "+arg);
