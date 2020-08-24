@@ -535,8 +535,10 @@ public:
 		plugins.emplace_back(new SshPlugin);
 		for(const auto& pluginName : pluginNames)
 			plugins.emplace_back(new ExternalPlugin(pluginName));
-		for(const auto& plugin : plugins)
-			plugin->start();
+		if(!dryRun){
+			for(const auto& plugin : plugins)
+				plugin->start();
+		}
 	}
 	
 	~SystemState(){
@@ -546,8 +548,10 @@ public:
 		okay&=writeUpdatedExistingGroups();
 		if(!okay)
 			log_error("State not properly saved to disk");
-		for(const auto& plugin : plugins)
-			plugin->finish();
+		if(!dryRun){
+			for(const auto& plugin : plugins)
+				plugin->finish();
+		}
 	}
 	
 	void readExistingUsers(){ readExistingList("existing_users",existingUsers); }
