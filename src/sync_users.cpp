@@ -714,12 +714,14 @@ private:
 	void readExistingList(std::string fileName, std::set<std::string>& dataStore){
 		std::string filePath=dataPrefix+fileName;
 		auto perm=checkPermissions(filePath);
-		if(perm==PermState::DOES_NOT_EXIST && !dryRun){ //File doesn't exist
-			//This is fine, but before we do anything which might need to be 
-			//recorded there, make sure we can write to it.
-			std::ofstream touch(filePath);
-			if(!touch)
-				log_fatal("Unable to write to " << filePath);
+		if(perm==PermState::DOES_NOT_EXIST){ //File doesn't exist
+		 	if(!dryRun){
+				//This is fine, but before we do anything which might need to be 
+				//recorded there, make sure we can write to it.
+				std::ofstream touch(filePath);
+				if(!touch)
+					log_fatal("Unable to write to " << filePath);
+			}
 			return;
 		}
 		std::ifstream infile(filePath);
