@@ -536,21 +536,7 @@ for USER in $USERS_TO_CREATE; do
 			fi
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$(hostname -f)" == "nfs.grid.uchicago.edu" ]; then
-			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (ZFS)"
-			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
-			if [ "$?" -ne 0 ]; then
-				echo "Failed to create user $USER" 1>&2
-				cat existing_users new_users | sort | uniq > existing_users.new
-				mv existing_users.new existing_users
-				if [ "$?" -ne 0 ]; then
-					echo "Failed to replace existing_users file" 1>&2
-					release_lock
-					exit 1
-				fi
-				rm new_users
-				release_lock
-				exit 1
-			fi
+			echo "Creating ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
 			set_connect_home_zfs_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		else
