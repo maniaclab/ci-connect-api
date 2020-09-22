@@ -422,6 +422,20 @@ set_osg_disk_quotas(){
 	fi
 }
 
+set_connect_home_zfs_quotas(){
+        USER="$1"
+        zfs create tank/export/connect/"$USER"
+        chown -R "$USER": /tank/export/connect/"$USER"
+        CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/export/connect/"$USER" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+                echo "ZFS dataset creation failed for $USER"
+        elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+                zfs set userquota@"$USER"=100GB tank/export/connect/"$USER"
+        else
+                echo "$USER already has a quota of $CURRENT_ZFS_QUOTA"
+        fi
+}
+
 set_sptlocal_disk_quotas(){
 	USER="$1"
 	zfs create tank/sptlocal/user/"$USER"
@@ -449,12 +463,6 @@ set_stash_disk(){
 	USER="$1"
 	mkdir -p /stash/user/"$USER"
 	chown "$USER": /stash/user/"$USER"
-}
-
-set_collab_disk(){
-	USER="$1"
-	mkdir -p /collab/user/"$USER"
-	chown "$USER": /collab/user/"$USER"
 }
 
 set_ssh_authorized_keys(){
@@ -509,23 +517,59 @@ for USER in $USERS_TO_CREATE; do
 		exit 1
 	fi
 	USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
-	echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS"
 	if [ ! "$DRY_RUN" ]; then
-		useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
-		if [ "$?" -ne 0 ]; then
-			echo "Failed to create user $USER" 1>&2
-			cat existing_users new_users | sort | uniq > existing_users.new
-			mv existing_users.new existing_users
+		if [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
+			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (XFS)"
+			useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
-				echo "Failed to replace existing_users file" 1>&2
+				echo "Failed to create user $USER" 1>&2
+				cat existing_users new_users | sort | uniq > existing_users.new
+				mv existing_users.new existing_users
+				if [ "$?" -ne 0 ]; then
+					echo "Failed to replace existing_users file" 1>&2
+					release_lock
+					exit 1
+				fi
+				rm new_users
 				release_lock
 				exit 1
 			fi
-			rm new_users
-			release_lock
-			exit 1
+			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
+		elif [ "$(hostname -f)" == "nfs.grid.uchicago.edu" ]; then
+			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (ZFS)"
+			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			if [ "$?" -ne 0 ]; then
+				echo "Failed to create user $USER" 1>&2
+				cat existing_users new_users | sort | uniq > existing_users.new
+				mv existing_users.new existing_users
+				if [ "$?" -ne 0 ]; then
+					echo "Failed to replace existing_users file" 1>&2
+					release_lock
+					exit 1
+				fi
+				rm new_users
+				release_lock
+				exit 1
+			fi
+			set_connect_home_zfs_quotas "$USER"
+			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
+		else
+			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
+			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			if [ "$?" -ne 0 ]; then
+				echo "Failed to create user $USER" 1>&2
+				cat existing_users new_users | sort | uniq > existing_users.new
+				mv existing_users.new existing_users
+				if [ "$?" -ne 0 ]; then
+					echo "Failed to replace existing_users file" 1>&2
+					release_lock
+					exit 1
+				fi
+				rm new_users
+				release_lock
+				exit 1
+			fi
 		fi
-		set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		# OSG specific: Try to pick out the first group to which the user belongs and set it as the default 'project'
 		# However, we must not pick 'osg', or any of the login node groups, so we remove these from the list.
 		FILTERED_USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
@@ -533,10 +577,8 @@ for USER in $USERS_TO_CREATE; do
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 		if [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			set_osg_disk_quotas "$USER"
-		elif [ "$GROUP_ROOT_GROUP" == "root.cms" ]; then
+		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
 			set_stash_disk "$USER"
-		elif [ "$GROUP_ROOT_GROUP" == "root.duke" -o "$GROUP_ROOT_GROUP" == "root.uchicago" -o "$GROUP_ROOT_GROUP" == "root.veritas" -o "$GROUP_ROOT_GROUP" == "root.snowmass21" ]; then
-			set_collab_disk "$USER"
 		fi
 		# SPT specific: Create user directories on sptlocal.grid.uchicago.edu and xenon-dcache-head.grid.uchicago.edu only. Sorry...
 		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "sptlocal.grid.uchicago.edu" ]; then
