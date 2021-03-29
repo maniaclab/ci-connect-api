@@ -498,10 +498,6 @@ set_forward_file(){
 	USER="$1"
 	USER_HOME_DIR="$2"
 	USER_EMAIL="$3"
-	# Don't overwrite if the user already has a .forward file
-	if [ -e "$USER_HOME_DIR/.forward" ]; then
-		return
-	fi
 	echo "$USER_EMAIL" > "$USER_HOME_DIR/.forward"
 }
 
