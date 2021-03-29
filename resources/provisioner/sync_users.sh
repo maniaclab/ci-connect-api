@@ -494,6 +494,17 @@ set_default_project(){
 	chown -R "$USER": "$USER_HOME_DIR/.ciconnect"
 }
 
+set_forward_file(){
+	USER="$1"
+	USER_HOME_DIR="$2"
+	USER_EMAIL="$3"
+	# Don't overwrite if the user already has a project file
+	if [ -e "$USER_HOME_DIR/.forward" ]; then
+		return
+	fi
+	echo "$USER_EMAIL" > "$USER_HOME_DIR/.forward"
+}
+
 # Ensure that all active users have accounts
 cat /dev/null > new_users
 for USER in $USERS_TO_CREATE; do
@@ -561,6 +572,7 @@ for USER in $USERS_TO_CREATE; do
 		FILTERED_USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
 		DEFAULT_GROUP=$(/usr/bin/env echo "$FILTERED_USER_GROUPS" | head -n 1)
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
+		set_forward_file "$USER" "${HOME_DIR_ROOT}/${USER}" "$USER_EMAIL"
 		if [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			set_osg_disk_quotas "$USER"
 		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
@@ -609,6 +621,7 @@ for USER in $USERS_TO_UPDATE; do
 		FILTERED_USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
 		DEFAULT_GROUP=$(/usr/bin/env echo "$FILTERED_USER_GROUPS" | head -n 1)
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
+		set_forward_file "$USER" "${HOME_DIR_ROOT}/${USER}" "$USER_EMAIL"
 	fi
 	ACTUAL_USER_ID=$(id -u "$USER")
 	if [ "$ACTUAL_USER_ID" != "$EXPECTED_USER_ID" ]; then
