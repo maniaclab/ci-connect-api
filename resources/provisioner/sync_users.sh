@@ -65,6 +65,14 @@ HELP="Usage: sync_users.sh [OPTION]...
         Report changes which would be made, without actually making any. 
     --clean-home
         When deleting users, delete their home directories as well. 
+    --create-gridmap-file
+        Create a grid map file for active users
+    --create-storage-authzdb-file
+        Create a storage authzdb file for active users
+    --storage-authzdb-path
+        The path to use for users in group for the storage-authzdb file
+    --storage-authzdb-local
+        The path to the file for any local users to add to the storage-authzb file
 "
 
 # Read command line arguments
@@ -117,6 +125,34 @@ do
 		ERASE_HOME=1
 	elif [ "$arg" = "--dry-run" ]; then
 		DRY_RUN=1
+	elif [ "$arg" = "--create-gridmap-file" ]; then
+		if [ "$#" -lt 1 ]; then
+			echo "Error: Missing value after $arg option" 1>&2
+			exit 1
+		fi
+		GRID_MAPFILE="$1"
+		shift
+	elif [ "$arg" = "--create-storage-authzdb-file" ]; then
+		if [ "$#" -lt 1 ]; then
+			echo "Error: Missing value after $arg option" 1>&2
+			exit 1
+		fi
+		STORAGE_AUTHZDB_FILE="$1"
+		shift
+	elif [ "$arg" = "--storage-authzdb-path" ]; then
+		if [ "$#" -lt 1 ]; then
+			echo "Error: Missing value after $arg option" 1>&2
+			exit 1
+		fi
+		STORAGE_AUTHZDB_PATH="$1"
+		shift
+	elif [ "$arg" = "--storage-authzdb-local" ]; then
+		if [ "$#" -lt 1 ]; then
+			echo "Error: Missing value after $arg option" 1>&2
+			exit 1
+		fi
+		STORAGE_AUTHZDB_LOCAL="$1"
+		shift
 	else
 		echo "Error: Unexpected argument: $arg" 1>&2
 		exit 1
@@ -199,6 +235,12 @@ if [ -z "$HOME_DIR_ROOT" ]; then
 	HOME_DIR_ROOT='/home'
 	echo "HOME_DIR_ROOT not set, using default value $HOME_DIR_ROOT"
 fi
+# If storage-authzdb creation is requested, ensure we have a path
+if [ -n "$STORAGE_AUTHZDB_FILE" ] && [ -z "$STORAGE_AUTHZDB_PATH" ]; then
+	STORAGE_AUTHZDB_PATH=''
+	echo "STORAGE_AUTHZDB_PATH not set and file generation requested, using default value \"$STORAGE_AUTHZDB_PATH\""
+fi
+
 
 # Ensure that necessary commands are available
 ensure_available(){
@@ -423,17 +465,17 @@ set_osg_disk_quotas(){
 }
 
 set_connect_home_zfs_quotas(){
-        USER="$1"
-        zfs create tank/export/connect/"$USER"
-        chown -R "$USER": /tank/export/connect/"$USER"
-        CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/export/connect/"$USER" 2>/dev/null)
-        if [ $? -ne 0 ]; then
-                echo "ZFS dataset creation failed for $USER"
-        elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-                zfs set userquota@"$USER"=100GB tank/export/connect/"$USER"
-        else
-                echo "$USER already has a quota of $CURRENT_ZFS_QUOTA"
-        fi
+	USER="$1"
+	zfs create tank/export/connect/"$USER"
+	chown -R "$USER": /tank/export/connect/"$USER"
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/export/connect/"$USER" 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		echo "ZFS dataset creation failed for $USER"
+	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=100GB tank/export/connect/"$USER"
+	else
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA"
+	fi
 }
 
 set_sptlocal_disk_quotas(){
@@ -452,11 +494,11 @@ set_sptlocal_disk_quotas(){
 }
 
 set_sptgrid_disk(){
-        USER="$1"
-        USER_ID="$2"
+	USER="$1"
+	USER_ID="$2"
 	GROUP_ID="$3"
-        chimera mkdir /sptgrid/user/"$USER"
-        chimera chown "$USER_ID":"$GROUP_ID" /sptgrid/user/"$USER"
+	chimera mkdir /sptgrid/user/"$USER"
+	chimera chown "$USER_ID":"$GROUP_ID" /sptgrid/user/"$USER"
 }
 
 set_stash_disk(){
@@ -476,6 +518,22 @@ set_ssh_authorized_keys(){
 	chown -R "$USER": "$USER_HOME_DIR/.ssh"
 	mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
 	chmod 0600 "$USER_HOME_DIR/.ssh/authorized_keys"
+}
+
+set_grid_mapfile(){
+	USER="$1"
+	USER_X509="$2"
+	MAP_FILE="$3"
+	echo "$USER_X509 $USER" >> $MAP_FILE
+}
+
+set_storage_authzdb_file(){
+	USER="$1"
+	USER_ID="$2"
+	GROUP_ID="$3"
+	MAP_FILE="$4"
+	STORAGE_PATH="$5"
+	echo "authorize $USER read-write $USER_ID $GROUP_ID / /$STORAGE_PATH /" >> $MAP_FILE
 }
 
 set_default_project(){
@@ -634,5 +692,62 @@ for USER in $DISABLED_USERS; do
 		fi
 	fi
 done
+
+# Generate grid mapfile for active users if requested
+if [ -n "$GRID_MAPFILE" ]; then
+	GRID_MAPFILE_TMP="${GRID_MAPFILE}.tmp"
+	echo "Creating grid mapfile $GRID_MAPFILE; temp file $GRID_MAPFILE_TMP"
+	if [ -f "$GRID_MAPFILE_TMP" ]; then
+		rm $GRID_MAPFILE_TMP
+	fi
+	for USER in $ACTIVE_USERS; do
+		USER_DATA=$(jq 'select(.unix_name==("'${USER}'"))' user_data)
+		if [ $(/usr/bin/env echo "$USER_DATA" | jq '.service_account') = "true" ]; then
+			echo "Skipping $USER which is a service account"
+			continue
+		fi
+		USER_X509=$(/usr/bin/env echo "$USER_DATA" | jq '."X.509_DN"')
+		if [ "$USER_X509" == '""' ]; then
+			echo "Skipping empty DN for user $USER: '$USER_X509'"
+			continue
+		fi
+		echo "Adding user $USER to grid mapfile with DN $USER_X509"
+		set_grid_mapfile "$USER" "$USER_X509" "$GRID_MAPFILE_TMP"
+	done
+	if [ ! "$DRY_RUN" ]; then
+		mv "$GRID_MAPFILE_TMP" "$GRID_MAPFILE"
+	fi
+fi
+
+# Generate storage-authzdb for active users if requested
+if [ -n "$STORAGE_AUTHZDB_FILE" ]; then
+	STORAGE_AUTHZDB_FILE_TMP="${STORAGE_AUTHZDB_FILE}.tmp"
+	echo "Creating storage-authzdb file $STORAGE_AUTHZDB_FILE; temp file $STORAGE_AUTHZDB_FILE_TMP"
+	if [ -f "$STORAGE_AUTHZDB_FILE_TMP" ]; then
+		rm $STORAGE_AUTHZDB_FILE_TMP
+	fi
+	echo "version 2.1" > "$STORAGE_AUTHZDB_FILE_TMP"
+	if [ -n "$STORAGE_AUTHZDB_LOCAL" ]; then
+		cat "$STORAGE_AUTHZDB_LOCAL" >> "$STORAGE_AUTHZDB_FILE_TMP"
+	fi
+	for USER in $ACTIVE_USERS; do
+		USER_DATA=$(jq 'select(.unix_name==("'${USER}'"))' user_data)
+		if [ $(/usr/bin/env echo "$USER_DATA" | jq '.service_account') = "true" ]; then
+			echo "Skipping $USER which is a service account"
+			continue
+		fi
+		USER_ID=$(/usr/bin/env echo "$USER_DATA" | jq -r '.unix_id')
+		GROUP_ID=$(grep "$(groups "$USER" | awk '{print $3}'):" /etc/group | cut -d: -f3)
+		if grep "${USER}" "$STORAGE_AUTHZDB_LOCAL" > /dev/null 2>&1; then
+			echo "User $USER already exists in $STORAGE_AUTHZDB_LOCAL, skipping"
+		else
+			echo "Adding user $USER to grid mapfile with UID $USER_ID, GID $GROUP_ID, and path $STORAGE_AUTHZDB_PATH"
+			set_storage_authzdb_file "$USER" "$USER_ID" "$GROUP_ID" "$STORAGE_AUTHZDB_FILE_TMP" "$STORAGE_AUTHZDB_PATH"
+		fi
+	done
+	if [ ! "$DRY_RUN" ]; then
+		mv "$STORAGE_AUTHZDB_FILE_TMP" "$STORAGE_AUTHZDB_FILE"
+	fi
+fi
 
 release_lock
