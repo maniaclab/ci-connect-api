@@ -388,7 +388,10 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 		//theoretical regex: ^[a-zA-Z0-9._][-a-zA-Z0-9._]*$
 		const static std::string allowedFirstCharacters=
 		"abcdefghijklmnopqrstuvwxyz";
-		const static std::string allowedRemainingCharacters=allowedFirstCharacters+"-";
+		const static std::string allowedRemainingCharacters=
+		allowedFirstCharacters+
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		"0123456789._-";
 		//unixName is known to have at least one character
 		if(allowedFirstCharacters.find(targetUser.unixName[0])==std::string::npos){
 			log_warn("User unixName began with forbidden character " << targetUser.unixName[0]);
