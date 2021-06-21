@@ -478,6 +478,20 @@ set_connect_home_zfs_quotas(){
 	fi
 }
 
+set_af_home_zfs_quotas(){
+	USER="$1"
+	zfs create export/home/"$USER"
+	chown -R "$USER": export/home/"$USER"
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" export/home/"$USER" 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		echo "ZFS dataset creation failed for $USER"
+	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=100GB export/home/"$USER"
+	else
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA"
+	fi
+}
+
 set_sptlocal_disk_quotas(){
 	USER="$1"
 	zfs create tank/sptlocal/user/"$USER"
@@ -604,6 +618,10 @@ for USER in $USERS_TO_CREATE; do
 			echo "Creating ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
 			set_connect_home_zfs_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
+		elif [ "$(hostname -f)" == "nfs.af.uchicago.edu" ]; then
+			echo "Creating ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
+			set_af_home_zfs_quotas "$USER"
+			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		else
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
 			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
@@ -724,7 +742,7 @@ if [ -n "$STORAGE_AUTHZDB_FILE" ]; then
 	STORAGE_AUTHZDB_FILE_TMP="${STORAGE_AUTHZDB_FILE}.tmp"
 	echo "Creating storage-authzdb file $STORAGE_AUTHZDB_FILE; temp file $STORAGE_AUTHZDB_FILE_TMP"
 	if [ -f "$STORAGE_AUTHZDB_FILE_TMP" ]; then
-		rm $STORAGE_AUTHZDB_FILE_TMP
+		rm "$STORAGE_AUTHZDB_FILE_TMP"
 	fi
 	echo "version 2.1" > "$STORAGE_AUTHZDB_FILE_TMP"
 	if [ -n "$STORAGE_AUTHZDB_LOCAL" ]; then
