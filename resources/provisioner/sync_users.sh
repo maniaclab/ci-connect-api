@@ -480,13 +480,13 @@ set_connect_home_zfs_quotas(){
 
 set_af_home_zfs_quotas(){
 	USER="$1"
-	zfs create export/home/"$USER"
-	chown -R "$USER": export/home/"$USER"
-	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" export/home/"$USER" 2>/dev/null)
+	mkdir /export/home/"$USER"
+	chown -R "$USER": /export/home/"$USER"
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" export/home" 2>/dev/null)
 	if [ $? -ne 0 ]; then
 		echo "ZFS dataset creation failed for $USER"
 	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-		zfs set userquota@"$USER"=100GB export/home/"$USER"
+		zfs set userquota@"$USER"=100GB export/home"
 	else
 		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA"
 	fi
