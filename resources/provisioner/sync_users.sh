@@ -480,15 +480,25 @@ set_connect_home_zfs_quotas(){
 
 set_af_home_zfs_quotas(){
 	USER="$1"
-	mkdir /export/home/"$USER"
-	chown -R "$USER": /export/home/"$USER"
 	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" export/home 2>/dev/null)
 	if [ $? -ne 0 ]; then
 		echo "ZFS dataset creation failed for $USER"
-	elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
+	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
 		zfs set userquota@"$USER"=100GB export/home
 	else
-		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA"
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on export/home"
+	fi
+}
+
+set_af_work_zfs_quotas(){
+	USER="$1"
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" export/work 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		echo "ZFS dataset creation failed for $USER"
+	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=100GB export/work
+	else
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on export/work"
 	fi
 }
 
@@ -619,8 +629,22 @@ for USER in $USERS_TO_CREATE; do
 			set_connect_home_zfs_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$(hostname -f)" == "nfs.af.uchicago.edu" ]; then
-			echo "Creating ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
+			echo "Creating user and ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
+			if [ "$?" -ne 0 ]; then
+				echo "Failed to create user $USER" 1>&2
+				cat existing_users new_users | sort | uniq > existing_users.new
+				mv existing_users.new existing_users
+				if [ "$?" -ne 0 ]; then
+					echo "Failed to replace existing_users file" 1>&2
+					release_lock
+					exit 1
+				fi
+				rm new_users
+				release_lock
+				exit 1
+			fi
 			set_af_home_zfs_quotas "$USER"
+			set_af_work_zfs_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		else
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
