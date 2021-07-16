@@ -548,6 +548,28 @@ set_ssh_authorized_keys(){
 	chmod 0600 "$USER_HOME_DIR/.ssh/authorized_keys"
 }
 
+set_condor_token() {
+	USER="$1"
+	if [ "$(stat -f -c%T /home/"$USER")" == "nfs" ]; then
+		echo "Home appears to be a mounted NFS filesystem, checking for Condor token..."
+		CONDOR_IDENTITY="$USER@af.uchicago.edu"
+		CONDOR_DIR="/home/$USER/.condor"
+		CONDOR_TOKEN_DIR="$CONDOR_DIR/tokens.d"
+		CONDOR_TOKEN_PATH="$CONDOR_TOKEN_DIR/token"
+		if [ "$(stat "$CONDOR_TOKEN_PATH" > /dev/null 2>&1)" -ne 0 ]; then
+			echo "Condor token dir doesn't exist, creating it for $USER and issuing a token"
+			mkdir -p "$CONDOR_TOKEN_DIR"
+			condor_token_create -identity "$CONDOR_IDENTITY" > "$CONDOR_TOKEN_PATH"
+			chown -R "$USER": "$CONDOR_DIR"
+			chmod 600 "$CONDOR_TOKEN_PATH"
+		else
+			echo "Token already exists, cowardly doing nothing"
+		fi
+	fi
+}
+
+
+
 set_grid_mapfile(){
 	USER="$1"
 	USER_X509="$2"
@@ -651,6 +673,10 @@ for USER in $USERS_TO_CREATE; do
 			set_af_home_quotas "$USER"
 			set_af_work_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
+		elif [ "$(hostname -f)" == "head01.af.uchicago.edu" ] || \
+			[ "$(hostname -f)" == "login01.af.uchicago.edu" ] || \
+			[ "$(hostname -f)" == "login02.af.uchicago.edu" ]; then
+			set_condor_token "$USER"
 		else
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
 			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
