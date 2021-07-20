@@ -673,9 +673,7 @@ for USER in $USERS_TO_CREATE; do
 			set_af_home_quotas "$USER"
 			set_af_work_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
-		elif [ "$(hostname -f)" == "head01.af.uchicago.edu" ] || \
-			[ "$(hostname -f)" == "login01.af.uchicago.edu" ] || \
-			[ "$(hostname -f)" == "login02.af.uchicago.edu" ]; then
+		elif [ "$(hostname -f)" == "head01.af.uchicago.edu" ]; then
 			set_condor_token "$USER"
 		else
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
