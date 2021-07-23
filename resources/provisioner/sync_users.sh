@@ -494,7 +494,7 @@ set_af_home_quotas(){
 
 set_af_work_quotas(){
 	USER="$1"
-    mkdir -p /export/work/$USER && chown $USER: /export/work/$USER
+	mkdir -p /export/work/$USER && chown $USER: /export/work/$USER
 	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" export/work 2>/dev/null)
 	if [ $? -ne 0 ]; then
 		echo "ZFS dataset creation failed for $USER"
