@@ -24,6 +24,7 @@ struct User{
 	std::string globusID;
 	std::string sshKey;
 	std::string x509DN;
+	std::string totpSecret;
 	std::string joinDate;
 	std::string lastUseTime;
 	unsigned int unixID;
@@ -186,5 +187,18 @@ private:
 	
 	std::string generateRawID();
 } idGenerator;
+
+static class TOTPGenerator{
+public:
+	// Create a base32 secret for TOTP secrets
+	std::string generateTOTPSecret(){
+		return generateRawTOTPSecret();
+	}
+private:
+	std::mutex mut;
+	std::random_device idSource;
+
+	std::string generateRawTOTPSecret();
+} totpGenerator;
 
 #endif //CONNECT_ENTITIES_H
