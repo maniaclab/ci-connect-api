@@ -6,6 +6,9 @@
 #include <boost/archive/iterators/transform_width.hpp>
 #include <boost/archive/iterators/ostream_iterator.hpp>
 
+#include <cppcodec/base32_rfc4648.hpp>
+#include <random>
+
 bool operator==(const User& u1, const User& u2){
 	return(u1.valid==u2.valid && u1.unixName==u2.unixName);
 }
@@ -105,4 +108,19 @@ std::string IDGenerator::generateRawID(){
 		if(c=='/') c='_';
 	}
 	return result;
+}
+
+std::string TOTPGenerator::generateRawTOTPSecret() {
+	uint8_t buffer[16];
+	{
+		std::lock_guard<std::mutex> lock(mut);
+		std::uniform_int_distribution<int> d(0, 255);
+		for(int i = 0; i < 16; i++) {
+			buffer[i] = d(idSource);
+		}
+	}
+
+	using base32 = cppcodec::base32_rfc4648;
+	std::string s = base32::encode(buffer);
+	return s;
 }
