@@ -379,6 +379,15 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 	}
 	else
 		targetUser.x509DN=" "; //dummy data to keep dynamo happy
+	// Allow a TOTP token to be requested at user creation time.
+	if(body["metadata"].HasMember("create_totp_secret")){
+		if(!body["metadata"]["create_totp_secret"].IsBool())
+			return crow::response(400,generateError("Incorrect type for TOTP secret"));
+		if(body["metadata"]["create_totp_secret"].GetBool())
+			targetUser.totpSecret = totpGenerator.generateTOTPSecret();
+	}
+	else
+		targetUser.totpSecret = " "; //keep dynamo happy
 	targetUser.unixName=body["metadata"]["unix_name"].GetString();
 	if(targetUser.unixName.empty()){
 		log_warn("User unixName was empty");
@@ -510,6 +519,10 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 		metadata.AddMember("X.509_DN", targetUser.x509DN, alloc);
 	else
 		metadata.AddMember("X.509_DN", "", alloc);
+	if(targetUser.totpSecret!=" ")
+		metadata.AddMember("totpSecret", targetUser.totpSecret, alloc);
+	else
+		metadata.AddMember("totpSecret", "", alloc);
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
 	metadata.AddMember("unix_id", targetUser.unixID, alloc);
 	metadata.AddMember("join_date", targetUser.joinDate, alloc);
@@ -620,6 +633,13 @@ crow::response updateUser(PersistentStore& store, const crow::request& req, cons
 		if(!body["metadata"]["globusID"].IsString())
 			return crow::response(400,generateError("Incorrect type for user globus ID"));
 		updatedUser.globusID=body["metadata"]["globusID"].GetString();
+	}
+	// Allow users to (re)generate their TOTP secret. 
+	if(body["metadata"].HasMember("create_totp_secret")){
+		if(!body["metadata"]["create_totp_secret"].IsBool())
+			return crow::response(400,generateError("Incorrect type for TOTP secret"));
+		if(body["metadata"]["create_totp_secret"].GetBool())
+			updatedUser.totpSecret = totpGenerator.generateTOTPSecret();
 	}
 	
 	log_info("Updating " << targetUser << " info");
