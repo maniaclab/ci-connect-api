@@ -565,6 +565,7 @@ void PersistentStore::InitializeTables(std::string bootstrapUserFile){
 			log_fatal("Unable to read root user credentials");
 		rootUser.globusID="No Globus ID";
 		rootUser.sshKey="No SSH key";
+		rootUser.x509DN="No X.509 DN";
 		rootUser.totpSecret="No TOTP secret";
 		rootUser.unixName="root";
 		rootUser.joinDate=timestamp();
