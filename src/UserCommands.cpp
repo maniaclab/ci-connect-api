@@ -521,9 +521,9 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 	else
 		metadata.AddMember("X.509_DN", "", alloc);
 	if(targetUser.totpSecret!=" ")
-		metadata.AddMember("totpSecret", targetUser.totpSecret, alloc);
+		metadata.AddMember("totp_secret", targetUser.totpSecret, alloc);
 	else
-		metadata.AddMember("totpSecret", "", alloc);
+		metadata.AddMember("totp_secret", "", alloc);
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
 	metadata.AddMember("unix_id", targetUser.unixID, alloc);
 	metadata.AddMember("join_date", targetUser.joinDate, alloc);
