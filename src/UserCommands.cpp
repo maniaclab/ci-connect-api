@@ -385,6 +385,10 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 			return crow::response(400,generateError("Incorrect type for TOTP secret"));
 		if(body["metadata"]["create_totp_secret"].GetBool())
 			targetUser.totpSecret = totpGenerator.generateTOTPSecret();
+		else
+			// if the bool evaluates to false, we still need to set the
+			// totpSecret to something that will make dynamo happy
+			targetUser.totpSecret = " ";
 	}
 	else
 		targetUser.totpSecret = " "; //keep dynamo happy
@@ -520,10 +524,15 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 		metadata.AddMember("X.509_DN", targetUser.x509DN, alloc);
 	else
 		metadata.AddMember("X.509_DN", "", alloc);
-	if(targetUser.totpSecret!=" ")
-		metadata.AddMember("totp_secret", targetUser.totpSecret, alloc);
-	else
-		metadata.AddMember("totp_secret", "", alloc);
+	// only display the totp secret to the user or to a superuser
+	if(user==targetUser || user.superuser) {
+		// however, it can still be blank if the flag wasn't set when
+		// the user was created
+		if(targetUser.totpSecret!=" ")
+			metadata.AddMember("totp_secret", targetUser.totpSecret, alloc);
+		else
+			metadata.AddMember("totp_secret", "", alloc);
+	}
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
 	metadata.AddMember("unix_id", targetUser.unixID, alloc);
 	metadata.AddMember("join_date", targetUser.joinDate, alloc);
