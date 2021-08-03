@@ -111,11 +111,11 @@ std::string IDGenerator::generateRawID(){
 }
 
 std::string TOTPGenerator::generateRawTOTPSecret() {
-	uint8_t buffer[16];
+	uint8_t buffer[20];
 	{
 		std::lock_guard<std::mutex> lock(mut);
 		std::uniform_int_distribution<int> d(0, 255);
-		for(int i = 0; i < 16; i++) {
+		for(int i = 0; i < 20; i++) {
 			buffer[i] = d(idSource);
 		}
 	}
