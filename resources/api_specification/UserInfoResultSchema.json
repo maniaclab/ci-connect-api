@@ -74,7 +74,7 @@
           }
         }
       },
-      "required": ["id","name","email","phone","institution","access_token","public_key","X.509_DN","totp_secret","unix_name","unix_id","superuser","service_account","join_date"]
+      "required": ["id","name","email","phone","institution","access_token","public_key","X.509_DN","unix_name","unix_id","superuser","service_account","join_date"]
     }
   },
   "required": ["apiVersion","kind","metadata"]
