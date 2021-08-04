@@ -570,6 +570,29 @@ set_condor_token() {
 	fi
 }
 
+set_google_authenticator_secret() {
+	USER="$1"
+	USER_HOME_DIR="$2"
+	USER_SECRET_DATA="$3"
+	GOOG_AUTH_TMP="$USER_HOME_DIR/.google.authenticator.new"
+	echo "$3" >> $GOOG_AUTH_TMP
+	echo "\" RATE_LIMIT 3 30" >> "$GOOG_AUTH_TMP"
+	echo "\" WINDOW_SIZE 3" >> "$GOOG_AUTH_TMP"
+	echo "\" DISALLOW_REUSE" >> "$GOOG_AUTH_TMP"
+	echo "\" TOTP_AUTH" >> "$GOOG_AUTH_TMP"
+	chown $USER: "$GOOG_AUTH_TMP"
+	chmod 0400 "$GOOG_AUTH_TMP"
+	if [ -f "$USER_HOME_DIR/.google_authenticator" ]; then
+		# Remove immutability on the file
+		chattr -i "$USER_HOME_DIR/.google_authenticator"
+	fi	
+	mv "$GOOG_AUTH_TMP" "$USER_HOME_DIR/.google_authenticator"
+	# Set the file to be immutable. This prevents the user from deleting the
+	# file (intentionally or otherwise). Note that this is not atomic - there
+	# is a miniscule window where a user could remove the file before chattr
+	# triggers. This would be rectified within the provisioner runs again.
+	chattr +i "$USER_HOME_DIR/.google_authenticator"
+}
 
 
 set_grid_mapfile(){

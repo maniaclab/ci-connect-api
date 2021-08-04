@@ -36,6 +36,9 @@
         "X.509_DN": {
           "type": "string"
         },
+        "totp_secret": {
+          "type": "string"
+        },
         "unix_name": {
           "type": "string"
         },

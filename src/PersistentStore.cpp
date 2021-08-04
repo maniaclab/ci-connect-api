@@ -566,6 +566,7 @@ void PersistentStore::InitializeTables(std::string bootstrapUserFile){
 		rootUser.globusID="No Globus ID";
 		rootUser.sshKey="No SSH key";
 		rootUser.x509DN="No X.509 DN";
+		rootUser.totpSecret="No TOTP secret";
 		rootUser.unixName="root";
 		rootUser.joinDate=timestamp();
 		rootUser.lastUseTime=timestamp();
@@ -733,6 +734,7 @@ bool PersistentStore::addUser(User& user){
 		{"institution",AttributeValue(user.institution)},
 		{"sshKey",AttributeValue(user.sshKey)},
 		{"x509DN",AttributeValue(user.x509DN)},
+		{"totpSecret",AttributeValue(user.totpSecret)},
 		{"joinDate",AttributeValue(user.joinDate)},
 		{"lastUseTime",AttributeValue(user.lastUseTime)},
 		{"superuser",AttributeValue().SetBool(user.superuser)},
@@ -794,6 +796,7 @@ User PersistentStore::getUser(const std::string& id){
 	user.globusID=findOrThrow(item,"globusID","user record missing globusID attribute").GetS();
 	user.sshKey=findOrThrow(item,"sshKey","user record missing sshKey attribute").GetS();
 	user.x509DN=findOrDefault(item,"x509DN",missingString).GetS();
+	user.totpSecret=findOrDefault(item,"totpSecret",missingString).GetS();
 	user.joinDate=findOrThrow(item,"joinDate","user record missing joinDate attribute").GetS();
 	user.lastUseTime=findOrThrow(item,"lastUseTime","user record missing lastUseTime attribute").GetS();
 	user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
@@ -916,6 +919,7 @@ bool PersistentStore::updateUser(const User& user, const User& oldUser){
 	                                            {"institution",AVU().WithValue(AV(user.institution))},
 	                                            {"sshKey",AVU().WithValue(AV(user.sshKey))},
 	                                            {"x509DN",AVU().WithValue(AV(user.x509DN))},
+	                                            {"totpSecret",AVU().WithValue(AV(user.totpSecret))},
 	                                            {"lastUseTime",AVU().WithValue(AV(user.lastUseTime))},
 	                                            {"superuser",AVU().WithValue(AV().SetBool(user.superuser))},
 	                                            {"serviceAccount",AVU().WithValue(AV().SetBool(user.serviceAccount))}
@@ -1090,6 +1094,7 @@ std::vector<User> PersistentStore::listUsers(){
 			user.globusID=findOrThrow(item,"globusID","user record missing globusID attribute").GetS();
 			user.sshKey=findOrThrow(item,"sshKey","user record missing sshKey attribute").GetS();
 			user.x509DN=findOrDefault(item,"x509DN",missingString).GetS();
+			user.totpSecret=findOrDefault(item,"totpSecret",missingString).GetS();
 			user.joinDate=findOrThrow(item,"joinDate","user record missing joinDate attribute").GetS();
 			user.lastUseTime=findOrThrow(item,"lastUseTime","user record missing lastUseTime attribute").GetS();
 			user.superuser=findOrThrow(item,"superuser","user record missing superuser attribute").GetBool();
