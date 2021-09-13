@@ -180,6 +180,14 @@ if [ "$DO_WIPE" ]; then
 		for DEFUNCT_USER in $(cat existing_users); do
 			echo "Deleting user $DEFUNCT_USER"
 			if [ ! "$DRY_RUN" ]; then
+				which condor_hold
+				if [ "$?" -ne 0 ]; then
+					echo "Holding all jobs for user"
+					condor_hold $DEFUNCT_USER
+				fi
+				echo "Killing all processes for user and sleeping for 2 seconds"
+				killall -9 -u $DEFUNCT_USER
+				sleep 2
 				$USERDEL "$DEFUNCT_USER"
 				if [ "$?" -ne 0 ]; then
 					echo "Failed to delete user" 1>&2
