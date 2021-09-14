@@ -180,6 +180,19 @@ if [ "$DO_WIPE" ]; then
 		for DEFUNCT_USER in $(cat existing_users); do
 			echo "Deleting user $DEFUNCT_USER"
 			if [ ! "$DRY_RUN" ]; then
+				which condor_hold >/dev/null 2>&1 # may not exist
+				if [ "$?" -ne 0 ]; then
+					echo "Holding all jobs for user"
+					condor_hold $DEFUNCT_USER
+				fi
+				which crontab >/dev/null 2>&1 # may not exist, esp in containers
+				if [ "$?" -ne 0 ]; then
+					echo "Removing crons for user"
+					crontab -r -u $DEFUNCT_USER
+					echo "Killing all processes for user and sleeping for 2 seconds"
+				fi
+				killall -9 -u $DEFUNCT_USER
+				sleep 2
 				$USERDEL "$DEFUNCT_USER"
 				if [ "$?" -ne 0 ]; then
 					echo "Failed to delete user" 1>&2
@@ -370,6 +383,19 @@ $DISABLED_USERS" | sort > all_users
 for DEFUNCT_USER in $(join -v1 existing_users all_users); do
 	echo "Deleting user $DEFUNCT_USER"
 	if [ ! "$DRY_RUN" ]; then
+		which condor_hold >/dev/null 2>&1 # may not exist
+		if [ "$?" -ne 0 ]; then
+			echo "Holding all jobs for user"
+			condor_hold $DEFUNCT_USER
+		fi
+		which crontab >/dev/null 2>&1 # may not exist, esp in containers
+		if [ "$?" -ne 0 ]; then
+			echo "Removing crons for user"
+			crontab -r -u $DEFUNCT_USER
+			echo "Killing all processes for user and sleeping for 2 seconds"
+		fi
+		killall -9 -u $DEFUNCT_USER
+		sleep 2
 		$USERDEL "$DEFUNCT_USER"
 		if [ "$?" -eq 0 ]; then
 			sed '/^'"$DEFUNCT_USER"'$/d' existing_users > existing_users.new
