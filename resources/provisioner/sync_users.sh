@@ -383,12 +383,12 @@ $DISABLED_USERS" | sort > all_users
 for DEFUNCT_USER in $(join -v1 existing_users all_users); do
 	echo "Deleting user $DEFUNCT_USER"
 	if [ ! "$DRY_RUN" ]; then
-		which condor_hold # may not exist
+		which condor_hold >/dev/null 2>&1 # may not exist
 		if [ "$?" -ne 0 ]; then
 			echo "Holding all jobs for user"
 			condor_hold $DEFUNCT_USER
 		fi
-		which crontab # may not exist, esp in containers
+		which crontab >/dev/null 2>&1 # may not exist, esp in containers
 		if [ "$?" -ne 0 ]; then
 			echo "Removing crons for user"
 			crontab -r -u $DEFUNCT_USER
