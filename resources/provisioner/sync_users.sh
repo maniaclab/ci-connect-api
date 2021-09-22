@@ -676,6 +676,10 @@ for USER in $USERS_TO_CREATE; do
 	USER_ID=$(/usr/bin/env echo "$USER_DATA" | jq -r '.unix_id')
 	USER_NAME=$(/usr/bin/env echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(/usr/bin/env echo "$USER_DATA" | jq -r '.email')
+	TOTP_SECRET=$(/usr/bin/env echo "$USER_DATA" | jq -er '.totp_secret')
+	if [ "$?" -ne 0 ];
+		echo "No TOTP secret object found - your API server version may not support it"
+	fi
 	RAW_USER_GROUPS=$(/usr/bin/env echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
 	if [ "$?" -ne 0 ]; then
 		echo "Failed to extract group_memberships for user $USER" 1>&2
@@ -765,6 +769,9 @@ for USER in $USERS_TO_CREATE; do
 		DEFAULT_GROUP=$(/usr/bin/env echo "$FILTERED_USER_GROUPS" | head -n 1)
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 		set_forward_file "$USER" "${HOME_DIR_ROOT}/${USER}" "$USER_EMAIL"
+		if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ]; then
+			set_google_authenticator_secret "$USER" "${HOME_DIR_ROOT}/${USER}" "$TOTP_SECRET" 
+		fi
 		if [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			set_osg_disk_quotas "$USER"
 		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
@@ -802,6 +809,10 @@ for USER in $USERS_TO_UPDATE; do
 	EXPECTED_USER_ID=$(/usr/bin/env echo "$USER_DATA" | jq -r '.unix_id')
 	USER_NAME=$(/usr/bin/env echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(/usr/bin/env echo "$USER_DATA" | jq -r '.email')
+	TOTP_SECRET=$(/usr/bin/env echo "$USER_DATA" | jq -er '.totp_secret')
+	if [ "$?" -ne 0 ];
+		echo "No TOTP secret object found - your API server version may not support it"
+	fi
 	RAW_USER_GROUPS=$(/usr/bin/env echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
 	USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
 	echo "Updating user $USER with groups $USER_GROUPS"
@@ -814,6 +825,9 @@ for USER in $USERS_TO_UPDATE; do
 		DEFAULT_GROUP=$(/usr/bin/env echo "$FILTERED_USER_GROUPS" | head -n 1)
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 		set_forward_file "$USER" "${HOME_DIR_ROOT}/${USER}" "$USER_EMAIL"
+		if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ]; then
+			set_google_authenticator_secret "$USER" "${HOME_DIR_ROOT}/${USER}" "$TOTP_SECRET" 
+		fi
 	fi
 	ACTUAL_USER_ID=$(id -u "$USER")
 	if [ "$ACTUAL_USER_ID" != "$EXPECTED_USER_ID" ]; then
