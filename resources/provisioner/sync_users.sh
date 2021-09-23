@@ -475,13 +475,17 @@ set_osg_disk_quotas(){
 	# We might want to factor these out and make them configurable.
 	# 50G/100G for $HOME, 500G for Ceph
 	# first check that we don't have a quota set. if we do, we don't want to bulldoze over it
-	CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /public/"$USER" 2>/dev/null)
-	if [ $? -ne 0 ]; then
-		setfattr -n ceph.quota.max_bytes -v 500000000000 /public/"$USER"
-	else 
-		echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
+	which getfattr >/dev/null 2>&1 # requires 'attr' package, not installed by default on EL
+	if [ "$?" -ne 0 ]; then
+		echo "getfattr(1) is not installed or not in PATH. Cannot set Ceph quota. Try installing 'attr'?"
+	else
+		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /public/"$USER" 2>/dev/null)
+		if [ $? -ne 0 ]; then
+			setfattr -n ceph.quota.max_bytes -v 500000000000 /public/"$USER"
+		else 
+			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
+		fi
 	fi
-
 	CURRENT_XFS_QUOTA=$(xfs_quota -x -c 'report' /home | grep "$USER")
 	if [ $? -ne 0 ]; then
 		xfs_quota -x -c "limit -u bsoft=50000000000 bhard=100000000000 $USER" /home
@@ -600,6 +604,7 @@ set_google_authenticator_secret() {
 	USER="$1"
 	USER_HOME_DIR="$2"
 	USER_SECRET_DATA="$3"
+	echo "Creating/updating MFA secrets for $USER"
 	GOOG_AUTH_TMP="$USER_HOME_DIR/.google.authenticator.new"
 	echo "$3" >> $GOOG_AUTH_TMP
 	echo "\" RATE_LIMIT 3 30" >> "$GOOG_AUTH_TMP"
@@ -676,6 +681,10 @@ for USER in $USERS_TO_CREATE; do
 	USER_ID=$(/usr/bin/env echo "$USER_DATA" | jq -r '.unix_id')
 	USER_NAME=$(/usr/bin/env echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(/usr/bin/env echo "$USER_DATA" | jq -r '.email')
+	TOTP_SECRET=$(/usr/bin/env echo "$USER_DATA" | jq -er '.totp_secret')
+	if [ "$?" -ne 0 ]; then
+		echo "No TOTP secret object found - your API server version may not support it"
+	fi
 	RAW_USER_GROUPS=$(/usr/bin/env echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
 	if [ "$?" -ne 0 ]; then
 		echo "Failed to extract group_memberships for user $USER" 1>&2
@@ -765,6 +774,9 @@ for USER in $USERS_TO_CREATE; do
 		DEFAULT_GROUP=$(/usr/bin/env echo "$FILTERED_USER_GROUPS" | head -n 1)
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 		set_forward_file "$USER" "${HOME_DIR_ROOT}/${USER}" "$USER_EMAIL"
+		if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ]; then
+			set_google_authenticator_secret "$USER" "${HOME_DIR_ROOT}/${USER}" "$TOTP_SECRET" 
+		fi
 		if [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			set_osg_disk_quotas "$USER"
 		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
@@ -802,6 +814,10 @@ for USER in $USERS_TO_UPDATE; do
 	EXPECTED_USER_ID=$(/usr/bin/env echo "$USER_DATA" | jq -r '.unix_id')
 	USER_NAME=$(/usr/bin/env echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(/usr/bin/env echo "$USER_DATA" | jq -r '.email')
+	TOTP_SECRET=$(/usr/bin/env echo "$USER_DATA" | jq -er '.totp_secret')
+	if [ "$?" -ne 0 ]; then
+		echo "No TOTP secret object found - your API server version may not support it"
+	fi
 	RAW_USER_GROUPS=$(/usr/bin/env echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
 	USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
 	echo "Updating user $USER with groups $USER_GROUPS"
@@ -814,6 +830,9 @@ for USER in $USERS_TO_UPDATE; do
 		DEFAULT_GROUP=$(/usr/bin/env echo "$FILTERED_USER_GROUPS" | head -n 1)
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 		set_forward_file "$USER" "${HOME_DIR_ROOT}/${USER}" "$USER_EMAIL"
+		if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ]; then
+			set_google_authenticator_secret "$USER" "${HOME_DIR_ROOT}/${USER}" "$TOTP_SECRET" 
+		fi
 	fi
 	ACTUAL_USER_ID=$(id -u "$USER")
 	if [ "$ACTUAL_USER_ID" != "$EXPECTED_USER_ID" ]; then
