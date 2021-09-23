@@ -52,7 +52,7 @@ HELP="Usage: sync_users.sh [OPTION]...
         enclosing group of the user source group.
     -h, --help
         Show this help message
-    -t token, --api-token token
+    -t token-file, --api-token-file token-file
         Use token when contacting the CI-Connect API
     -u group, --user-group group
         Use group as the user source group, the group from which users are 
@@ -224,7 +224,7 @@ fi
 
 # Check that necessary variables are set
 if [ -z "$API_TOKEN_FILE" ]; then
-	echo "Error: API_TOKEN_FILE must be set in the environment or with the --api-token option" 1>&2
+	echo "Error: API_TOKEN_FILE must be set in the environment or with the --api-token-file option" 1>&2
 	exit 1
 fi
 # This is the Base URL for contacting the connect API
@@ -279,7 +279,7 @@ acquire_lock
 
 # Get all members of the group
 REQUEST_START=$(date "+%s.%N")
-curl -sf ${API_ENDPOINT}/v1alpha1/groups/${USER_SOURCE_GROUP}/members?token=${API_TOKEN_FILE} > group_members.json
+curl -sf ${API_ENDPOINT}/v1alpha1/groups/${USER_SOURCE_GROUP}/members?token=$(<${API_TOKEN_FILE}) > group_members.json
 if [ "$?" -ne 0 ]; then
 	echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/groups/${USER_SOURCE_GROUP}/members" 1>&2
 	release_lock
@@ -323,12 +323,12 @@ while [ "$PROCESSED" -lt "$N_ACTIVE" ]; do
 	REQUEST='{'
 	SEP=""
 	for uname in $USER_BLOCK; do
-		REQUEST="${REQUEST}${SEP}"'"/v1alpha1/users/'"$uname?token=${API_TOKEN_FILE}"'":{"method":"GET"}'
+		REQUEST="${REQUEST}${SEP}"'"/v1alpha1/users/'"$uname?token=$(<${API_TOKEN_FILE})"'":{"method":"GET"}'
 		SEP=','
 	done
 	REQUEST="${REQUEST}"'}'
 	/usr/bin/env echo "$REQUEST" > user_request
-	curl -sf -X POST --data '@user_request' ${API_ENDPOINT}/v1alpha1/multiplex?token=${API_TOKEN_FILE} > raw_user_data
+	curl -sf -X POST --data '@user_request' ${API_ENDPOINT}/v1alpha1/multiplex?token=$(<${API_TOKEN_FILE}) > raw_user_data
 	if [ "$?" -ne 0 ]; then
 		echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/multiplex" 1>&2
 		release_lock
@@ -356,7 +356,7 @@ if [ "$BASE_GROUP_CONTEXT" ]; then
 	BASE_GROUP_CONTEXT="$BASE_GROUP_CONTEXT."
 fi
 # Get all subgroups
-curl -sf ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}/subgroups?token=${API_TOKEN_FILE} > subgroups.json
+curl -sf ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}/subgroups?token=$(<${API_TOKEN_FILE}) > subgroups.json
 if [ "$?" -ne 0 ]; then
 	echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}/subgroups" 1>&2
 	release_lock
