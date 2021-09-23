@@ -475,13 +475,17 @@ set_osg_disk_quotas(){
 	# We might want to factor these out and make them configurable.
 	# 50G/100G for $HOME, 500G for Ceph
 	# first check that we don't have a quota set. if we do, we don't want to bulldoze over it
-	CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /public/"$USER" 2>/dev/null)
-	if [ $? -ne 0 ]; then
-		setfattr -n ceph.quota.max_bytes -v 500000000000 /public/"$USER"
-	else 
-		echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
+	which getfattr >/dev/null 2>&1 # requires 'attr' package, not installed by default on EL
+	if [ "$?" -ne 0 ]; then
+		echo "getfattr(1) is not installed or not in PATH. Cannot set Ceph quota. Try installing 'attr'?"
+	else
+		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /public/"$USER" 2>/dev/null)
+		if [ $? -ne 0 ]; then
+			setfattr -n ceph.quota.max_bytes -v 500000000000 /public/"$USER"
+		else 
+			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
+		fi
 	fi
-
 	CURRENT_XFS_QUOTA=$(xfs_quota -x -c 'report' /home | grep "$USER")
 	if [ $? -ne 0 ]; then
 		xfs_quota -x -c "limit -u bsoft=50000000000 bhard=100000000000 $USER" /home
