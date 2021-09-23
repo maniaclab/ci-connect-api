@@ -604,6 +604,7 @@ set_google_authenticator_secret() {
 	USER="$1"
 	USER_HOME_DIR="$2"
 	USER_SECRET_DATA="$3"
+	echo "Creating/updating MFA secrets for $USER"
 	GOOG_AUTH_TMP="$USER_HOME_DIR/.google.authenticator.new"
 	echo "$3" >> $GOOG_AUTH_TMP
 	echo "\" RATE_LIMIT 3 30" >> "$GOOG_AUTH_TMP"
