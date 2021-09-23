@@ -814,7 +814,7 @@ for USER in $USERS_TO_UPDATE; do
 	USER_NAME=$(/usr/bin/env echo "$USER_DATA" | jq -r '.name')
 	USER_EMAIL=$(/usr/bin/env echo "$USER_DATA" | jq -r '.email')
 	TOTP_SECRET=$(/usr/bin/env echo "$USER_DATA" | jq -er '.totp_secret')
-	if [ "$?" -ne 0 ];
+	if [ "$?" -ne 0 ]; then
 		echo "No TOTP secret object found - your API server version may not support it"
 	fi
 	RAW_USER_GROUPS=$(/usr/bin/env echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
