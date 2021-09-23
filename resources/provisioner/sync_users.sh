@@ -89,7 +89,7 @@ do
 			echo "Error: Missing value after $arg option" 1>&2
 			exit 1
 		fi
-		API_TOKEN_FILE_FILE="$1"
+		API_TOKEN_FILE="$1"
 		shift
 	elif [ "$arg" = "--api-endpoint" -o "$arg" = "-e" ]; then
 		if [ "$#" -lt 1 ]; then
