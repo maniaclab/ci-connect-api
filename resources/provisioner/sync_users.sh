@@ -612,17 +612,8 @@ set_google_authenticator_secret() {
 	echo "\" DISALLOW_REUSE" >> "$GOOG_AUTH_TMP"
 	echo "\" TOTP_AUTH" >> "$GOOG_AUTH_TMP"
 	chown $USER: "$GOOG_AUTH_TMP"
-	chmod 0400 "$GOOG_AUTH_TMP"
-	if [ -f "$USER_HOME_DIR/.google_authenticator" ]; then
-		# Remove immutability on the file
-		chattr -i "$USER_HOME_DIR/.google_authenticator"
-	fi	
+	chmod 0400 "$GOOG_AUTH_TMP"	
 	mv "$GOOG_AUTH_TMP" "$USER_HOME_DIR/.google_authenticator"
-	# Set the file to be immutable. This prevents the user from deleting the
-	# file (intentionally or otherwise). Note that this is not atomic - there
-	# is a miniscule window where a user could remove the file before chattr
-	# triggers. This would be rectified within the provisioner runs again.
-	chattr +i "$USER_HOME_DIR/.google_authenticator"
 }
 
 
