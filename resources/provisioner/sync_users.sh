@@ -539,6 +539,7 @@ set_af_work_quotas(){
 
 set_snowmass_quotas(){
 	USER="$1"
+    # ZFS
 	mkdir -p /work/$USER && chown $USER: /work/$USER
 	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/scratch 2>/dev/null)
 	if [ $? -ne 0 ]; then
@@ -549,6 +550,20 @@ set_snowmass_quotas(){
 		zfs set userquota@"$USER"=5TB tank/scratch
 	else
 		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/scratch"
+	fi
+	# CephFS
+	mkdir -p /collab/user/"$USER"
+	chown "$USER": /collab/user/"$USER"
+	which getfattr >/dev/null 2>&1 # requires 'attr' package, not installed by default on EL
+	if [ "$?" -ne 0 ]; then
+		echo "getfattr(1) is not installed or not in PATH. Cannot set Ceph quota. Try installing 'attr'?"
+	else
+		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /collab/user/"$USER" 2>/dev/null)
+		if [ $? -ne 0 ]; then
+			setfattr -n ceph.quota.max_bytes -v 500000000000 /collab/user/"$USER"
+		else 
+			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
+		fi
 	fi
 }
 
