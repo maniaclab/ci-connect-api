@@ -537,6 +537,21 @@ set_af_work_quotas(){
 	fi
 }
 
+set_snowmass_quotas(){
+	USER="$1"
+	mkdir -p /work/$USER && chown $USER: /work/$USER
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/scratch 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		echo "ZFS dataset creation failed for $USER"
+	elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
+		echo "User creation failed for $USER, skipping quota creation for $USER on tank/scratch"
+	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=5TB tank/scratch
+	else
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/scratch"
+	fi
+}
+
 set_sptlocal_disk_quotas(){
 	USER="$1"
 	zfs create tank/sptlocal/user/"$USER"
@@ -770,6 +785,9 @@ for USER in $USERS_TO_CREATE; do
 		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
 			set_stash_disk "$USER"
 		fi
+		if [ "$GROUP_ROOT_GROUP" == "root.snowmass21" ]; then
+			set_snowmass_quotas "$USER"
+		fi   
 		# SPT specific: Create user directories on sptlocal.grid.uchicago.edu and xenon-dcache-head.grid.uchicago.edu only. Sorry...
 		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "sptlocal.grid.uchicago.edu" ]; then
 			set_sptlocal_disk_quotas "$USER"
