@@ -532,7 +532,7 @@ set_af_work_quotas(){
 	else
 		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /work/user/"$USER" 2>/dev/null)
 		if [ $? -ne 0 ]; then
-			QUOTA=$(5 * 1024 * 1024 * 1024 * 1024) #5 TB
+			QUOTA=$((5 * 1024 * 1024 * 1024 * 1024)) #5 TB
 			setfattr -n ceph.quota.max_bytes -v "$QUOTA" /work/user/"$USER"
 		else 
 			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
