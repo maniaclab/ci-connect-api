@@ -524,16 +524,49 @@ set_af_home_quotas(){
 
 set_af_work_quotas(){
 	USER="$1"
-	mkdir -p /export/work/$USER && chown $USER: /export/work/$USER
-	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" export/work 2>/dev/null)
+	mkdir -p /work/user/"$USER"
+	chown "$USER": /work/user/"$USER"
+	which getfattr >/dev/null 2>&1 # requires 'attr' package, not installed by default on EL
+	if [ "$?" -ne 0 ]; then
+		echo "getfattr(1) is not installed or not in PATH. Cannot set Ceph quota. Try installing 'attr'?"
+	else
+		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /work/user/"$USER" 2>/dev/null)
+		if [ $? -ne 0 ]; then
+			QUOTA=$(5 * 1024 * 1024 * 1024 * 1024) #5 TB
+			setfattr -n ceph.quota.max_bytes -v "$QUOTA" /work/user/"$USER"
+		else 
+			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
+		fi
+	fi
+}
+
+set_snowmass_quotas(){
+	USER="$1"
+    # ZFS
+	mkdir -p /work/$USER && chown $USER: /work/$USER
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/scratch 2>/dev/null)
 	if [ $? -ne 0 ]; then
 		echo "ZFS dataset creation failed for $USER"
 	elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
-		echo "User creation failed for $USER, skipping quota creation for $USER on export/work"
+		echo "User creation failed for $USER, skipping quota creation for $USER on tank/scratch"
 	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-		zfs set userquota@"$USER"=100GB export/work
+		zfs set userquota@"$USER"=5TB tank/scratch
 	else
-		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on export/work"
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/scratch"
+	fi
+	# CephFS
+	mkdir -p /collab/user/"$USER"
+	chown "$USER": /collab/user/"$USER"
+	which getfattr >/dev/null 2>&1 # requires 'attr' package, not installed by default on EL
+	if [ "$?" -ne 0 ]; then
+		echo "getfattr(1) is not installed or not in PATH. Cannot set Ceph quota. Try installing 'attr'?"
+	else
+		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /collab/user/"$USER" 2>/dev/null)
+		if [ $? -ne 0 ]; then
+			setfattr -n ceph.quota.max_bytes -v 500000000000 /collab/user/"$USER"
+		else 
+			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
+		fi
 	fi
 }
 
@@ -770,6 +803,9 @@ for USER in $USERS_TO_CREATE; do
 		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
 			set_stash_disk "$USER"
 		fi
+		if [ "$GROUP_ROOT_GROUP" == "root.snowmass21" ]; then
+			set_snowmass_quotas "$USER"
+		fi   
 		# SPT specific: Create user directories on sptlocal.grid.uchicago.edu and xenon-dcache-head.grid.uchicago.edu only. Sorry...
 		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "sptlocal.grid.uchicago.edu" ]; then
 			set_sptlocal_disk_quotas "$USER"
