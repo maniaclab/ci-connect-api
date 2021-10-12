@@ -524,16 +524,16 @@ set_af_home_quotas(){
 
 set_af_work_quotas(){
 	USER="$1"
-	mkdir -p /work/user/"$USER"
-	chown "$USER": /work/user/"$USER"
+	mkdir -p /work/"$USER"
+	chown "$USER": /work/"$USER"
 	which getfattr >/dev/null 2>&1 # requires 'attr' package, not installed by default on EL
 	if [ "$?" -ne 0 ]; then
 		echo "getfattr(1) is not installed or not in PATH. Cannot set Ceph quota. Try installing 'attr'?"
 	else
-		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /work/user/"$USER" 2>/dev/null)
+		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /work/"$USER" 2>/dev/null)
 		if [ $? -ne 0 ]; then
 			QUOTA=$((5 * 1024 * 1024 * 1024 * 1024)) #5 TB
-			setfattr -n ceph.quota.max_bytes -v "$QUOTA" /work/user/"$USER"
+			setfattr -n ceph.quota.max_bytes -v "$QUOTA" /work/"$USER"
 		else 
 			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
 		fi
