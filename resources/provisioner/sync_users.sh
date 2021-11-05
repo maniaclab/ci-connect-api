@@ -522,18 +522,18 @@ set_af_home_quotas(){
 	fi
 }
 
-set_af_work_quotas(){
+set_af_data_quotas(){
 	USER="$1"
-	mkdir -p /work/"$USER"
-	chown "$USER": /work/"$USER"
+	mkdir -p /data/"$USER"
+	chown "$USER": /data/"$USER"
 	which getfattr >/dev/null 2>&1 # requires 'attr' package, not installed by default on EL
 	if [ "$?" -ne 0 ]; then
 		echo "getfattr(1) is not installed or not in PATH. Cannot set Ceph quota. Try installing 'attr'?"
 	else
-		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /work/"$USER" 2>/dev/null)
+		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /data/"$USER" 2>/dev/null)
 		if [ $? -ne 0 ]; then
 			QUOTA=$((5 * 1024 * 1024 * 1024 * 1024)) #5 TB
-			setfattr -n ceph.quota.max_bytes -v "$QUOTA" /work/"$USER"
+			setfattr -n ceph.quota.max_bytes -v "$QUOTA" /data/"$USER"
 		else 
 			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
 		fi
@@ -752,7 +752,7 @@ for USER in $USERS_TO_CREATE; do
 				exit 1
 			fi
 			set_af_home_quotas "$USER"
-			set_af_work_quotas "$USER"
+			set_af_data_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$(hostname -f)" == "head01.af.uchicago.edu" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
