@@ -831,6 +831,10 @@ fi
 # Ensure that previously existing users have updated information
 for USER in $USERS_TO_UPDATE; do
 	USER_DATA=$(jq 'select(.unix_name==("'${USER}'"))' user_data)
+	if [ -z "$USER_DATA" ]; then
+		echo "User data for $USER is empty. Cowardly aborting update."
+		continue
+	fi
 	if [ $(/usr/bin/env echo "$USER_DATA" | jq '.service_account') = "true" ]; then
 		echo "Skipping $USER which is a service account"
 		continue
