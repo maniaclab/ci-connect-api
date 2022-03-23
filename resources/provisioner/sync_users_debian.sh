@@ -73,6 +73,8 @@ HELP="Usage: sync_users.sh [OPTION]...
         The path to use for users in group for the storage-authzdb file
     --storage-authzdb-local
         The path to the file for any local users to add to the storage-authzb file
+    --no-create-dirs
+        Do not create any data directories (e.g. \$HOME, \$SCRATCH)
 "
 
 # Read command line arguments
@@ -153,6 +155,8 @@ do
 		fi
 		STORAGE_AUTHZDB_LOCAL="$1"
 		shift
+	elif [ "$arg" = "--no-create-dirs" ]; then
+		NO_CREATE_DIRS=1
 	else
 		echo "Error: Unexpected argument: $arg" 1>&2
 		exit 1
@@ -716,7 +720,11 @@ for USER in $USERS_TO_CREATE; do
 	if [ ! "$DRY_RUN" ]; then
 		if [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (XFS)"
-			useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+            if [ "$NO_CREATE_DIRS" ]; then
+			    useradd -c "$USER_NAME" -u "$USER_ID" -M -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+            else 
+			    useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+            fi 
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
@@ -756,7 +764,7 @@ for USER in $USERS_TO_CREATE; do
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$(hostname -f)" == "head01.af.uchicago.edu" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
-			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -M -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
@@ -774,7 +782,7 @@ for USER in $USERS_TO_CREATE; do
 			set_condor_token "$USER"
 		else
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
-			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -M -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER" -s /bin/bash # ensure bash shell
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
@@ -798,9 +806,9 @@ for USER in $USERS_TO_CREATE; do
 		if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
 			set_google_authenticator_secret "$USER" "${HOME_DIR_ROOT}/${USER}" "$TOTP_SECRET" 
 		fi
-		if [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
+		if [ "$GROUP_ROOT_GROUP" == "root.osg" ] && [ -z "$NO_CREATE_DIRS" ]; then
 			set_osg_disk_quotas "$USER"
-		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
+		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ] && [ -z "$NO_CREATE_DIRS" ]; then
 			set_stash_disk "$USER"
 		fi
 		if [ "$GROUP_ROOT_GROUP" == "root.snowmass21" ]; then
