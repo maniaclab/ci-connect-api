@@ -326,12 +326,11 @@ while [ "$PROCESSED" -lt "$N_ACTIVE" ]; do
 		# may need to parse the token file and write it out into the bulk request
 		API_TOKEN=$(cat $API_TOKEN_FILE | cut -d'=' -f2)
 		REQUEST="${REQUEST}${SEP}"'"/v1alpha1/users/'"$uname?token=${API_TOKEN}"'":{"method":"GET"}'
-		#REQUEST="${REQUEST}${SEP}"'"/v1alpha1/users/'"$uname"'":{"method":"GET"}'
 		SEP=','
 	done
 	REQUEST="${REQUEST}"'}'
 	/usr/bin/env echo "$REQUEST" > user_request
-	curl -sf -X POST --data '@user_request' ${API_ENDPOINT}/v1alpha1/multiplex&token=foobarbaz > raw_user_data
+	curl -sf -X POST --data '@user_request' ${API_ENDPOINT}/v1alpha1/multiplex > raw_user_data
 	if [ "$?" -ne 0 ]; then
 		echo "Error: Failed to download data from ${API_ENDPOINT}/v1alpha1/multiplex" 1>&2
 		release_lock
@@ -345,7 +344,7 @@ while [ "$PROCESSED" -lt "$N_ACTIVE" ]; do
 		-e '/"superuser"/d' \
 		-e '/"state_set_by"/d' \
 		-e 's/\("state": "[^"]*"\),/\1/' >> user_data
-	#rm user_request raw_user_data
+	rm user_request raw_user_data
 	PROCESSED=$(expr $PROCESSED + $BLOCK_SIZE)
 	echo "Fetched $PROCESSED users"
 done
