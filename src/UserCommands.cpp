@@ -398,7 +398,7 @@ crow::response createUser(PersistentStore& store, const crow::request& req){
 		return crow::response(400,generateError("Empty user unix account name"));
 	}
 	{
-		//theoretical regex: ^[a-zA-Z0-9._][-a-zA-Z0-9._]*$
+		//theoretical regex: ^[a-z][-a-zA-Z0-9._]*$
 		const static std::string allowedFirstCharacters=
 		"abcdefghijklmnopqrstuvwxyz";
 		const static std::string allowedRemainingCharacters=
