@@ -182,10 +182,13 @@ crow::response multiplex(crow::SimpleApp& server, PersistentStore& store, const 
 	using namespace std::chrono;
 	high_resolution_clock::time_point t1 = high_resolution_clock::now();
 	
-	const User user=authenticateUser(store, req.url_params.get("token"));
-	log_info(user << " requested execute a command bundle from " << req.remote_endpoint);
-	if(!user)
-		return crow::response(403,generateError("Not authorized"));
+	// I don't think we actually need to check authorization here. Couple of reasons:
+	//   1. It's apparently a bit odd to include query strings with a POST request.
+	//   2. Presumably all subsequent requests need to be authenticated
+	//const User user=authenticateUser(store, req.url_params.get("token"));
+	//log_info(user << " requested execute a command bundle from " << req.remote_endpoint);
+	//if(!user)
+	//	return crow::response(403,generateError("Not authorized"));
 	
 	rapidjson::Document body;
 	try{
