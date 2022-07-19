@@ -816,11 +816,11 @@ for USER in $USERS_TO_CREATE; do
 		if [ "$GROUP_ROOT_GROUP" == "root.collab" ]; then
 			set_collab_quotas "$USER"
 		fi
-		# SPT specific: Create user directories on sptlocal.grid.uchicago.edu and xenon-dcache-head.grid.uchicago.edu only. Sorry...
+		# SPT specific: Create user directories on sptlocal.grid.uchicago.edu and osg-dcache-head.grid.uchicago.edu only. Sorry...
 		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "sptlocal.grid.uchicago.edu" ]; then
 			set_sptlocal_disk_quotas "$USER"
 		fi
-		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "xenon-dcache-head.grid.uchicago.edu" ]; then
+		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "osg-dcache-head.grid.uchicago.edu" ]; then
 			GROUP_ID=$(grep spt: /etc/group | cut -d: -f3)
 			set_sptgrid_disk "$USER" "$USER_ID" "$GROUP_ID"
 		fi
