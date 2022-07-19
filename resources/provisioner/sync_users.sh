@@ -544,7 +544,7 @@ set_af_data_quotas(){
 
 set_snowmass_quotas(){
 	USER="$1"
-    # ZFS
+	# ZFS
 	mkdir -p /work/$USER && chown $USER: /work/$USER
 	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/scratch 2>/dev/null)
 	if [ $? -ne 0 ]; then
@@ -556,6 +556,10 @@ set_snowmass_quotas(){
 	else
 		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/scratch"
 	fi
+}
+
+set_collab_quotas(){
+	USER="$1"
 	# CephFS
 	mkdir -p /collab/user/"$USER"
 	chown "$USER": /collab/user/"$USER"
@@ -807,7 +811,11 @@ for USER in $USERS_TO_CREATE; do
 		fi
 		if [ "$GROUP_ROOT_GROUP" == "root.snowmass21" ]; then
 			set_snowmass_quotas "$USER"
-		fi   
+			set_collab_quotas "$USER"
+		fi
+		if [ "$GROUP_ROOT_GROUP" == "root.collab" ]; then
+			set_collab_quotas "$USER"
+		fi
 		# SPT specific: Create user directories on sptlocal.grid.uchicago.edu and osg-dcache-head.grid.uchicago.edu only. Sorry...
 		if [ "$GROUP_ROOT_GROUP" == "root.spt" ] && [ "$(hostname -f)" == "sptlocal.grid.uchicago.edu" ]; then
 			set_sptlocal_disk_quotas "$USER"
