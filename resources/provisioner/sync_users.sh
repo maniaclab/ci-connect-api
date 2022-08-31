@@ -356,6 +356,10 @@ BASE_GROUP_CONTEXT=$(/usr/bin/env echo "$GROUP_ROOT_GROUP" | sed -n 's/^\(.*\)\.
 if [ "$BASE_GROUP_CONTEXT" ]; then
 	# demand an explicit dot after a non-empty base
 	BASE_GROUP_CONTEXT="$BASE_GROUP_CONTEXT."
+else
+	# Base group context is empty, set it to root. We never want to make
+	# groups starting with "root."
+	BASE_GROUP_CONTEXT="root."
 fi
 # Get all subgroups
 curl -sf -G -d @token ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}/subgroups > subgroups.json
