@@ -356,7 +356,7 @@ BASE_GROUP_CONTEXT=$(/usr/bin/env echo "$GROUP_ROOT_GROUP" | sed -n 's/^\(.*\)\.
 if [ "$BASE_GROUP_CONTEXT" ]; then
 	# demand an explicit dot after a non-empty base
 	BASE_GROUP_CONTEXT="$BASE_GROUP_CONTEXT."
-else
+elif [ "$GROUP_ROOT_GROUP" == "root" ]; then
 	# Base group context is empty, set it to root. We never want to make
 	# groups starting with "root."
 	BASE_GROUP_CONTEXT="root."
