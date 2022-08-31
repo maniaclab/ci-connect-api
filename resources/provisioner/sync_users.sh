@@ -780,7 +780,7 @@ for USER in $USERS_TO_CREATE; do
 			set_condor_token "$USER"
 		else
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
-			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			useradd -c "$USER_NAME" -M -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
