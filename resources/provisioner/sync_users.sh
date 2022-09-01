@@ -277,6 +277,10 @@ fi
 
 acquire_lock
 
+# Print the group and group root group
+echo "User source group: $USER_SOURCE_GROUP"
+echo "Group root group: $GROUP_ROOT_GROUP"
+
 # Get all members of the group
 REQUEST_START=$(date "+%s.%N")
 curl -sf -G -d @token ${API_ENDPOINT}/v1alpha1/groups/${USER_SOURCE_GROUP}/members > group_members.json
@@ -360,6 +364,7 @@ elif [ "$GROUP_ROOT_GROUP" == "root" ]; then
 	# Base group context is empty, set it to root. We never want to make
 	# groups starting with "root."
 	BASE_GROUP_CONTEXT="root."
+	BASE_GROUP_NAME=""
 fi
 # Get all subgroups
 curl -sf -G -d @token ${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}/subgroups > subgroups.json
@@ -427,7 +432,10 @@ done
 
 # Create groups which are needed and don't yet exist
 if grep -q "^${BASE_GROUP_NAME}:" /etc/group; then
-	echo "Group $BASE_GROUP_NAME already exists"
+	# Check for emptiness, if it's non-empty we can report this bit of info.
+	if [ ${BASE_GROUP_NAME}x != x ]; then 
+		echo "Group $BASE_GROUP_NAME already exists"
+	fi
 else
 	GID=$(curl -sf -G -d @token "${API_ENDPOINT}/v1alpha1/groups/${GROUP_ROOT_GROUP}" | jq -r '.metadata.unix_id')
 	if [ "$?" -ne 0 ]; then
@@ -466,7 +474,11 @@ for GROUP in $SUBGROUPS; do
 	fi
 done
 if [ ! "$DRY_RUN" ]; then
-	printf "%s\n%s" "$BASE_GROUP_NAME" "$SUBGROUPS" | cat existing_groups - | sort | uniq > existing_groups.new
+	if [ ${BASE_GROUP_NAME}x == x ]; then
+		printf "%s" "$SUBGROUPS" | cat existing_groups - | sort | uniq > existing_groups.new
+	else
+		printf "%s\n%s" "$BASE_GROUP_NAME" "$SUBGROUPS" | cat existing_groups - | sort | uniq > existing_groups.new
+	fi
 	mv existing_groups.new existing_groups
 fi
 
@@ -613,6 +625,11 @@ set_ssh_authorized_keys(){
 	USER="$1"
 	USER_HOME_DIR="$2"
 	USER_KEY_DATA="$3"
+	# check if the home dir exists
+	if [ ! -d "$user_home_dir" ]; then
+		echo "home directory for $1 does not exist. skipping authorized keys."
+		return
+	fi
 	if [ ! -d "$USER_HOME_DIR/.ssh" ]; then
 		mkdir "$USER_HOME_DIR/.ssh"
 	fi
@@ -680,6 +697,12 @@ set_default_project(){
 	USER="$1"
 	USER_HOME_DIR="$2"
 	USER_PROJECT="$3"
+
+	# check if the home dir exists
+	if [ ! -d "$user_home_dir" ]; then
+		echo "home directory for $1 does not exist. skipping setting default project."
+		return
+	fi
 	
 	# Don't overwrite if the user already has a project file
 	if [ -e "$USER_HOME_DIR/.ciconnect/defaultproject" ]; then
@@ -696,6 +719,11 @@ set_forward_file(){
 	USER="$1"
 	USER_HOME_DIR="$2"
 	USER_EMAIL="$3"
+	# Check if the home dir exists
+	if [ ! -d "$USER_HOME_DIR" ]; then
+		echo "Home directory for $1 does not exist. Skipping creation of .forward file"
+		return
+	fi
 	echo "$USER_EMAIL" > "$USER_HOME_DIR/.forward"
 }
 
@@ -724,7 +752,29 @@ for USER in $USERS_TO_CREATE; do
 	fi
 	USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
 	if [ ! "$DRY_RUN" ]; then
-		if [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
+		if [ ${USER_GROUPS}x == x ]; then
+			echo "Skipping $USER - User groups are empty"
+			continue
+		fi
+		if [ "$GROUP_ROOT_GROUP" == "root" ]; then
+			if [ "$(hostname -f)" == "stash-w.osgconnect.net" ]; then
+				echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS, with default user group and no home"
+				useradd -c "$USER_NAME" -u "$USER_ID" -M -b "${HOME_DIR_ROOT}" -N -G "$USER_GROUPS" "$USER"
+				if [ "$?" -ne 0 ]; then
+					echo "Failed to create user $USER" 1>&2
+					cat existing_users new_users | sort | uniq > existing_users.new
+					mv existing_users.new existing_users
+					if [ "$?" -ne 0 ]; then
+						echo "Failed to replace existing_users file" 1>&2
+						release_lock
+						exit 1
+					fi
+					rm new_users
+					release_lock
+					exit 1
+				fi
+			fi
+		elif [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (XFS)"
 			useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
@@ -784,7 +834,7 @@ for USER in $USERS_TO_CREATE; do
 			set_condor_token "$USER"
 		else
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
-			useradd -c "$USER_NAME" -M -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
@@ -803,6 +853,7 @@ for USER in $USERS_TO_CREATE; do
 		# However, we must not pick 'osg', or any of the login node groups, so we remove these from the list.
 		FILTERED_USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
 		DEFAULT_GROUP=$(/usr/bin/env echo "$FILTERED_USER_GROUPS" | head -n 1)
+		# This will fail if the user doesn't have a homedir
 		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 		set_forward_file "$USER" "${HOME_DIR_ROOT}/${USER}" "$USER_EMAIL"
 		if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
