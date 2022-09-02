@@ -488,6 +488,14 @@ set_osg_disk_quotas(){
 			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
 		fi
 	fi
+	mkdir -p /protected/"$USER"
+	chown "$USER": /protected/"$USER"
+	CURRENT_PROTECTED_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /protected/"$USER" 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		setfattr -n ceph.quota.max_bytes -v 500000000000 /protected/"$USER"
+	else
+		echo "$USER already has a quota of $CURRENT_PROTECTED_QUOTA"
+	fi
 	CURRENT_XFS_QUOTA=$(xfs_quota -x -c 'report' /home | grep "$USER")
 	if [ $? -ne 0 ]; then
 		xfs_quota -x -c "limit -u bsoft=50000000000 bhard=100000000000 $USER" /home
