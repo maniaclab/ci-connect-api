@@ -443,9 +443,9 @@ else
 		release_lock
 		exit 1
 	fi
-	echo "Creating group $BASE_GROUP_NAME with gid $GID"
-	if [ ! "$DRY_RUN" ]; then
-		if [ ${BASE_GROUP_NAME}x != x ]; then 
+	if [ ${BASE_GROUP_NAME}x != x ]; then 
+		echo "Creating group $BASE_GROUP_NAME with gid $GID"
+		if [ ! "$DRY_RUN" ]; then
 			groupadd "$BASE_GROUP_NAME" -g $GID
 			if [ "$?" -ne 0 ]; then
 				echo "Aborting due to group creation error" 1>&2
