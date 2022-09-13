@@ -445,11 +445,13 @@ else
 	fi
 	echo "Creating group $BASE_GROUP_NAME with gid $GID"
 	if [ ! "$DRY_RUN" ]; then
-		groupadd "$BASE_GROUP_NAME" -g $GID
-		if [ "$?" -ne 0 ]; then
-			echo "Aborting due to group creation error" 1>&2
-			release_lock
-			exit 1
+		if [ ${BASE_GROUP_NAME}x != x ]; then 
+			groupadd "$BASE_GROUP_NAME" -g $GID
+			if [ "$?" -ne 0 ]; then
+				echo "Aborting due to group creation error" 1>&2
+				release_lock
+				exit 1
+			fi
 		fi
 	fi
 fi
