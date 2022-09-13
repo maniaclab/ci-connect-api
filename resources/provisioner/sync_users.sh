@@ -466,11 +466,13 @@ for GROUP in $SUBGROUPS; do
 	else
 		echo "Creating group $GROUP with gid $GID"
 		if [ ! "$DRY_RUN" ]; then
-			groupadd "$GROUP" -g $GID
-			if [ "$?" -ne 0 ]; then
-				echo "Aborting due to group creation error" 1>&2
-				release_lock
-				exit 1
+			if [ ${GROUP}x != x ]; then 
+				groupadd "$GROUP" -g $GID
+				if [ "$?" -ne 0 ]; then
+					echo "Aborting due to group creation error" 1>&2
+					release_lock
+					exit 1
+				fi
 			fi
 		fi
 	fi
