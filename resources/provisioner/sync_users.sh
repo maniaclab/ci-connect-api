@@ -1,4 +1,4 @@
-#!/bin/sh -x
+#!/bin/sh
 
 LOCK_FILE="/var/lock/connect_sync"
 LOCK_DATA=$(printf '%10u\n' "$$")
