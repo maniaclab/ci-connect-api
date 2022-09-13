@@ -707,7 +707,7 @@ set_default_project(){
 	USER_PROJECT="$3"
 
 	# check if the home dir exists
-	if [ ! -d "$user_home_dir" ]; then
+	if [ ! -d "$USER_HOME_DIR" ]; then
 		echo "home directory for $1 does not exist. skipping setting default project."
 		return
 	fi
