@@ -524,13 +524,13 @@ set_osg_disk_quotas(){
 	fi
 }
 
-set_connect_home_zfs_quotas(){
+set_connect_home_quotas(){
 	USER="$1"
-	zfs create tank/export/connect/"$USER"
-	chown -R "$USER": /tank/export/connect/"$USER"
-	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/export/connect/"$USER" 2>/dev/null)
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/export/connect 2>/dev/null)
 	if [ $? -ne 0 ]; then
 		echo "ZFS dataset creation failed for $USER"
+	elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
+		echo "User creation failed for $USER, skipping quota creation for $USER on export/home"
 	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
 		zfs set userquota@"$USER"=100GB tank/export/connect/"$USER"
 	else
@@ -769,9 +769,14 @@ for USER in $USERS_TO_CREATE; do
 			continue
 		fi
 		if [ "$GROUP_ROOT_GROUP" == "root" ]; then
-			if [ "$(hostname -f)" == "stash-w.osgconnect.net" ]; then
+			if [ "$(hostname -f)" == "stash-w.osgconnect.net" ] || [ "$(hostname -f)" == "nfs.grid.uchicago.edu" ] ; then
 				echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS, with default user group and no home"
-				useradd -c "$USER_NAME" -u "$USER_ID" -M -b "${HOME_DIR_ROOT}" -N -G "$USER_GROUPS" "$USER"
+				useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -G "$USER_GROUPS" "$USER"
+				if [ "$(hostname -f)" == "nfs.grid.uchicago.edu" ]; then
+					echo "Creating home for user $USER with uid $USER_ID and groups $USER_GROUPS"
+					set_connect_home_quotas "$USER"
+					set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
+				fi
 				if [ "$?" -ne 0 ]; then
 					echo "Failed to create user $USER" 1>&2
 					cat existing_users new_users | sort | uniq > existing_users.new
@@ -802,10 +807,6 @@ for USER in $USERS_TO_CREATE; do
 				release_lock
 				exit 1
 			fi
-			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
-		elif [ "$(hostname -f)" == "nfs.grid.uchicago.edu" ]; then
-			echo "Creating ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
-			set_connect_home_zfs_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$(hostname -f)" == "nfs.af.uchicago.edu" ]; then
 			echo "Creating user and ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
