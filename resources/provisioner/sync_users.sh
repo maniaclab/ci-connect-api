@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -x
 
 LOCK_FILE="/var/lock/connect_sync"
 LOCK_DATA=$(printf '%10u\n' "$$")
@@ -504,6 +504,14 @@ set_osg_disk_quotas(){
 			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
 		fi
 	fi
+	mkdir -p /protected/"$USER"
+	chown "$USER": /protected/"$USER"
+	CURRENT_PROTECTED_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /protected/"$USER" 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		setfattr -n ceph.quota.max_bytes -v 500000000000 /protected/"$USER"
+	else
+		echo "$USER already has a quota of $CURRENT_PROTECTED_QUOTA"
+	fi
 	CURRENT_XFS_QUOTA=$(xfs_quota -x -c 'report' /home | grep "$USER")
 	if [ $? -ne 0 ]; then
 		xfs_quota -x -c "limit -u bsoft=50000000000 bhard=100000000000 $USER" /home
@@ -626,7 +634,7 @@ set_ssh_authorized_keys(){
 	USER_HOME_DIR="$2"
 	USER_KEY_DATA="$3"
 	# check if the home dir exists
-	if [ ! -d "$user_home_dir" ]; then
+	if [ ! -d "$USER_HOME_DIR" ]; then
 		echo "home directory for $1 does not exist. skipping authorized keys."
 		return
 	fi
