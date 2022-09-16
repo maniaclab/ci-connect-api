@@ -510,6 +510,7 @@ set_osg_disk_quotas(){
 	fi
 	mkdir -p /protected/"$USER"
 	chown "$USER": /protected/"$USER"
+	chmod 700 /protected/"$USER"
 	CURRENT_PROTECTED_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /protected/"$USER" 2>/dev/null)
 	if [ $? -ne 0 ]; then
 		setfattr -n ceph.quota.max_bytes -v 500000000000 /protected/"$USER"
