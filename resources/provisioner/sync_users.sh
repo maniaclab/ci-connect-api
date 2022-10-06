@@ -610,7 +610,7 @@ set_collab_quotas(){
 	elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
 		echo "User creation failed for $USER, skipping quota creation for $USER on tank/scratch"
 	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-		zfs set userquota@"$USER"=5TB tank/scratch
+		zfs set userquota@"$USER"=1TB tank/scratch
 	else
 		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/scratch"
 	fi
