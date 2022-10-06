@@ -603,6 +603,17 @@ set_collab_quotas(){
 			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
 		fi
 	fi
+	mkdir -p /scratch/"$USER" && chown "$USER":collab /scratch/"$USER"
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/scratch 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		echo "ZFS dataset creation failed for $USER"
+	elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
+		echo "User creation failed for $USER, skipping quota creation for $USER on tank/scratch"
+	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=1TB tank/scratch
+	else
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/scratch"
+	fi
 }
 
 set_sptlocal_disk_quotas(){
