@@ -603,7 +603,7 @@ set_collab_quotas(){
 			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
 		fi
 	fi
-	mkdir -p /scratch/"$USER" && chown "$USER": /scratch/"$USER"
+	mkdir -p /scratch/"$USER" && chown "$USER":collab /scratch/"$USER"
 	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/scratch 2>/dev/null)
 	if [ $? -ne 0 ]; then
 		echo "ZFS dataset creation failed for $USER"
