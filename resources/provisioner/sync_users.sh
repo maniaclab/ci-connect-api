@@ -659,8 +659,13 @@ set_ssh_authorized_keys(){
 	fi
 	echo "$USER_KEY_DATA" > "$USER_HOME_DIR/.ssh/authorized_keys.new"
 	chown -R "$USER": "$USER_HOME_DIR/.ssh"
-	mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
-	chmod 0600 "$USER_HOME_DIR/.ssh/authorized_keys"
+	chmod 0600 "$USER_HOME_DIR/.ssh/authorized_keys.new"
+	if [ $? -ne 0 ]; then
+		echo "Could not chmod new authorized keys file. Is this user out of quota?"
+		rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
+	else
+		mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
+	fi
 }
 
 set_condor_token() {
