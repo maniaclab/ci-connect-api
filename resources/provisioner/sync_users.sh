@@ -589,15 +589,15 @@ set_path_data_quotas(){
         USER="$1"
         mkdir -p /ospool/`hostname -s`/data/"$USER"
         chown "$USER": /ospool/`hostname -s`/data/"$USER"
-        CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" data 2>/dev/null)
+        CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" data/userdata 2>/dev/null)
         if [ $? -ne 0 ]; then
                 echo "ZFS dataset creation failed for $USER"
         elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
-                echo "User creation failed for $USER, skipping quota creation for $USER on data"
+                echo "User creation failed for $USER, skipping quota creation for $USER on data/userdata"
         elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-                zfs set userquota@"$USER"=500GB data
+                zfs set userquota@"$USER"=500GB data/userdata
         else
-                echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on data"
+                echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on data/userdata"
         fi
 }
 
