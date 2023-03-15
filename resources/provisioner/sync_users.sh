@@ -589,15 +589,15 @@ set_path_data_quotas(){
         USER="$1"
         mkdir -p /ospool/`hostname -s`/data/"$USER"
         chown "$USER": /ospool/`hostname -s`/data/"$USER"
-        CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" data/userdata 2>/dev/null)
+        CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/userdata 2>/dev/null)
         if [ $? -ne 0 ]; then
                 echo "ZFS dataset creation failed for $USER"
         elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
-                echo "User creation failed for $USER, skipping quota creation for $USER on data/userdata"
+                echo "User creation failed for $USER, skipping quota creation for $USER on tank/userdata"
         elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-                zfs set userquota@"$USER"=500GB data/userdata
+                zfs set userquota@"$USER"=500GB tank/userdata
         else
-                echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on data/userdata"
+                echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/userdata"
         fi
 }
 
@@ -634,28 +634,15 @@ set_collab_quotas(){
 		fi
 	fi
 	mkdir -p /scratch/"$USER" && chown "$USER":collab /scratch/"$USER"
-	if [ "$(hostname -f)" == "ap23.uc.osg-htc.org" ]; then
-                CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" data/scratch 2>/dev/null)
-                if [ $? -ne 0 ]; then
-	                echo "ZFS dataset creation failed for $USER"
-	        elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
-        	        echo "User creation failed for $USER, skipping quota creation for $USER on data/scratch"
-	        elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-        	        zfs set userquota@"$USER"=1TB data/scratch
-	        else
-        	        echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on data/scratch"
-                fi
+        CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/scratch 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		echo "ZFS dataset creation failed for $USER"
+	elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
+		echo "User creation failed for $USER, skipping quota creation for $USER on tank/scratch"
+	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=1TB tank/scratch
 	else
-                CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/scratch 2>/dev/null)
-		if [ $? -ne 0 ]; then
-			echo "ZFS dataset creation failed for $USER"
-		elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
-			echo "User creation failed for $USER, skipping quota creation for $USER on tank/scratch"
-		elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-			zfs set userquota@"$USER"=1TB tank/scratch
-		else
-			echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/scratch"
-		fi
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/scratch"
 	fi
 }
 
