@@ -852,24 +852,24 @@ for USER in $USERS_TO_CREATE; do
 			set_path_home_quotas "$USER"
 			set_path_data_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
-                elif [ "$(hostname -f)" == "ap23.uc.osg-htc.org" ]; then
-                        echo "Creating user and ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
-                        useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
-                        if [ "$?" -ne 0 ]; then
-                                echo "Failed to create user $USER" 1>&2
-                                cat existing_users new_users | sort | uniq > existing_users.new
-                                mv existing_users.new existing_users
-                                if [ "$?" -ne 0 ]; then
-                                        echo "Failed to replace existing_users file" 1>&2
-                                        release_lock
-                                        exit 1
-                                fi
-                                rm new_users
-                                release_lock
-                                exit 1
-                        fi
-                        set_collab_quotas "$USER"
-                        set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
+		elif [ "$(hostname -f)" == "ap23.uc.osg-htc.org" ]; then
+			echo "Creating user and ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
+			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			if [ "$?" -ne 0 ]; then
+				echo "Failed to create user $USER" 1>&2
+				cat existing_users new_users | sort | uniq > existing_users.new
+				mv existing_users.new existing_users
+				if [ "$?" -ne 0 ]; then
+					echo "Failed to replace existing_users file" 1>&2
+					release_lock
+					exit 1
+				fi
+				rm new_users
+				release_lock
+				exit 1
+			fi
+			set_collab_quotas "$USER"
+			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (XFS)"
 			useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
