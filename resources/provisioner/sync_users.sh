@@ -573,15 +573,15 @@ set_af_data_quotas(){
 
 set_path_home_quotas(){
 	USER="$1"
-	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" nvme/home 2>/dev/null)
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" system/home 2>/dev/null)
 	if [ $? -ne 0 ]; then
 		echo "ZFS dataset creation failed for $USER"
 	elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
-		echo "User creation failed for $USER, skipping quota creation for $USER on nvme/home"
+		echo "User creation failed for $USER, skipping quota creation for $USER on system/home"
 	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-		zfs set userquota@"$USER"=50GB nvme/home
+		zfs set userquota@"$USER"=50GB system/home
 	else
-		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on nvme/home"
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on system/home"
 	fi
 }
 
