@@ -539,6 +539,20 @@ set_connect_home_quotas(){
 	fi
 }
 
+set_path_collab_home_quotas(){
+	USER="$1"
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/export/path 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		echo "ZFS dataset creation failed for $USER"
+	elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
+		echo "User creation failed for $USER, skipping quota creation for $USER on export/home"
+	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=100GB tank/export/path/"$USER"
+	else
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA"
+	fi
+}
+
 set_af_home_quotas(){
 	USER="$1"
 	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" export/home 2>/dev/null)
@@ -634,6 +648,20 @@ set_collab_quotas(){
 		fi
 	fi
 	mkdir -p /scratch/"$USER" && chown "$USER":collab /scratch/"$USER"
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/scratch 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		echo "ZFS dataset creation failed for $USER"
+	elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
+		echo "User creation failed for $USER, skipping quota creation for $USER on tank/scratch"
+	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=1TB tank/scratch
+	else
+		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/scratch"
+	fi
+}
+
+set_collab_scratch_quotas() {
+	mkdir -p /scratch/"$USER" && chown "$USER": /scratch/"$USER"
 	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/scratch 2>/dev/null)
 	if [ $? -ne 0 ]; then
 		echo "ZFS dataset creation failed for $USER"
@@ -822,6 +850,10 @@ for USER in $USERS_TO_CREATE; do
 				if [ "$(hostname -f)" == "nfs.grid.uchicago.edu" ]; then
 					echo "Creating home for user $USER with uid $USER_ID and groups $USER_GROUPS"
 					set_connect_home_quotas "$USER"
+					if [ "${USER_GROUPS#*ap23}" != "$USER_GROUPS" ]; then
+						# User has ap23 in their login group, go ahead and set the collab quota.
+						set_path_collab_home_quotas
+					fi
 					set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 				fi
 				if [ "$?" -ne 0 ]; then
@@ -859,7 +891,7 @@ for USER in $USERS_TO_CREATE; do
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$(hostname -f)" == "ap23.uc.osg-htc.org" ]; then
 			echo "Creating user and ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
-			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER" 
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
@@ -873,7 +905,8 @@ for USER in $USERS_TO_CREATE; do
 				release_lock
 				exit 1
 			fi
-			set_collab_quotas "$USER"
+			# AP23 is distinct by having a dedicated /scratch vol
+			set_collab_scratch_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (XFS)"
