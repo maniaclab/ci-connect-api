@@ -724,6 +724,8 @@ set_ssh_authorized_keys(){
 	else
 		mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
 	fi
+	# Ensure that the SSH dir has the right permissions
+	chmod 0700 "$USER_HOME_DIR/.ssh"
 }
 
 set_condor_token() {
@@ -984,7 +986,7 @@ for USER in $USERS_TO_CREATE; do
 		FILTERED_USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | sed -e '/^'"$BASE_GROUP_NAME"'$/d' -e '/^'"$BASE_GROUP_NAME"'.login-nodes/d')
 		DEFAULT_GROUP=$(/usr/bin/env echo "$FILTERED_USER_GROUPS" | head -n 1)
 		# This will fail if the user doesn't have a homedir
-		set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
+		#set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 		set_forward_file "$USER" "${HOME_DIR_ROOT}/${USER}" "$USER_EMAIL"
 		if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
 			set_google_authenticator_secret "$USER" "${HOME_DIR_ROOT}/${USER}" "$TOTP_SECRET" 
