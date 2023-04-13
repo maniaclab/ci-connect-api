@@ -991,7 +991,7 @@ for USER in $USERS_TO_CREATE; do
 		if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
 			set_google_authenticator_secret "$USER" "${HOME_DIR_ROOT}/${USER}" "$TOTP_SECRET" 
 		fi
-		if [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
+		if [ "$(hostname -f)" == "login04.osgconnect.net" -o "$(hostname -f)" == "login05.osgconnect.net"]; then
 			set_osg_disk_quotas "$USER"
 		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
 			set_stash_disk "$USER"
