@@ -421,14 +421,24 @@ rm all_users
 # Delete all existing groups which should not exist
 # Do this after deleting users in case any of the groups we need to delete was 
 # the primary group of a user which was deleted. 
-for DEFUNCT_GROUP in $(printf "%s\n%s" "$BASE_GROUP_NAME" "$SUBGROUPS" | sort | join -v1 existing_groups -); do
-	echo "Deleting group $DEFUNCT_GROUP"
-	if [ ! "$DRY_RUN" ]; then
-		groupdel "$DEFUNCT_GROUP"
-		sed '/^'"$DEFUNCT_GROUP"'$/d' existing_groups > existing_groups.new
-		mv existing_groups.new existing_groups
-	fi
-done
+# At times there seems to be an empty response from the API, resulting in all
+# groups getting deleted. While it would be preferable to investigate further,
+# for now we'll check if the subgroups are completely empty. If so, we skip
+# deleting defunct groups. This may have adverse affects if ALL subgroups are
+# removed from a root group simultaneously but I can't think of any scenarios
+# where this would be important.
+if [ ${SUBGROUPS}x == x ]; then 
+	echo "Subgroup response seemingly empty from API. Cowardly refusing to delete existing groups!"
+else 
+	for DEFUNCT_GROUP in $(printf "%s\n%s" "$BASE_GROUP_NAME" "$SUBGROUPS" | sort | join -v1 existing_groups -); do
+		echo "Deleting group $DEFUNCT_GROUP"
+		if [ ! "$DRY_RUN" ]; then
+			groupdel "$DEFUNCT_GROUP"
+			sed '/^'"$DEFUNCT_GROUP"'$/d' existing_groups > existing_groups.new
+			mv existing_groups.new existing_groups
+		fi
+	done
+fi
 
 # Create groups which are needed and don't yet exist
 if grep -q "^${BASE_GROUP_NAME}:" /etc/group; then
