@@ -427,7 +427,7 @@ rm all_users
 # deleting defunct groups. This may have adverse affects if ALL subgroups are
 # removed from a root group simultaneously but I can't think of any scenarios
 # where this would be important.
-if [ ${SUBGROUPS}x == x ]; then 
+if [ "${SUBGROUPS}x" == "x" ]; then 
 	echo "Subgroup response seemingly empty from API. Cowardly refusing to delete existing groups!"
 else 
 	for DEFUNCT_GROUP in $(printf "%s\n%s" "$BASE_GROUP_NAME" "$SUBGROUPS" | sort | join -v1 existing_groups -); do
