@@ -674,6 +674,22 @@ set_collab_scratch_quotas() {
 	fi
 }
 
+set_collab_data_quotas() {
+	DATADIR=/ospool/uc-shared/user/"$USER"
+	mkdir -p $DATADIR && chown "$USER": $DATADIR
+	which getfattr >/dev/null 2>&1 # requires 'attr' package, not installed by default on EL
+	if [ "$?" -ne 0 ]; then
+		echo "getfattr(1) is not installed or not in PATH. Cannot set Ceph quota. Try installing 'attr'?"
+	else
+		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes $DATADIR 2>/dev/null)
+		if [ $? -ne 0 ]; then
+			setfattr -n ceph.quota.max_bytes -v 1000000000000 /collab/user/"$USER"
+		else
+			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA - will not make changes"
+		fi
+	fi
+}
+
 set_sptlocal_disk_quotas(){
 	USER="$1"
 	zfs create tank/sptlocal/user/"$USER"
@@ -907,8 +923,10 @@ for USER in $USERS_TO_CREATE; do
 				release_lock
 				exit 1
 			fi
-			# AP23 is distinct by having a dedicated /scratch vol
+			# AP23 is distinct by having a dedicated /scratch vol and user
+			# directory in ceph
 			set_collab_scratch_quotas "$USER"
+			set_collab_data_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (XFS)"
