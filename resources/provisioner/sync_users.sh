@@ -686,14 +686,14 @@ set_collab_scratch_quotas() {
 
 set_collab_data_quotas() {
 	DATADIR=/ospool/uc-shared/user/"$USER"
-	mkdir -p $DATADIR && chown "$USER": $DATADIR
+	mkdir -p "$DATADIR" && chown "$USER": "$DATADIR"
 	which getfattr >/dev/null 2>&1 # requires 'attr' package, not installed by default on EL
 	if [ "$?" -ne 0 ]; then
 		echo "getfattr(1) is not installed or not in PATH. Cannot set Ceph quota. Try installing 'attr'?"
 	else
-		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes $DATADIR 2>/dev/null)
+		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes "$DATADIR" 2>/dev/null)
 		if [ $? -ne 0 ]; then
-			setfattr -n ceph.quota.max_bytes -v 1000000000000 $DATADIR
+            setfattr -n ceph.quota.max_bytes -v $((1024 * 1024 * 1024 * 1024)) "$DATADIR"
 		else
 			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA - will not make changes"
 		fi
