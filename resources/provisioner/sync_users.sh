@@ -1029,7 +1029,7 @@ for USER in $USERS_TO_CREATE; do
 			set_snowmass_quotas "$USER"
 			set_collab_quotas "$USER"
 		fi
-		if [ "$GROUP_ROOT_GROUP" == "root.collab" ]; then
+		if [ "$GROUP_ROOT_GROUP" == "root.collab" ] && [ "$(hostname -f)" != "ap23.uc.osg-htc.org" ]; then
 			set_collab_quotas "$USER"
 		fi
 		# SPT specific: Create user directories on sptlocal.grid.uchicago.edu and osg-dcache-head.grid.uchicago.edu only. Sorry...
