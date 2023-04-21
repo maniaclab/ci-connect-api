@@ -879,8 +879,8 @@ for USER in $USERS_TO_CREATE; do
 				if [ "$(hostname -f)" == "nfs.grid.uchicago.edu" ]; then
 					echo "Creating home for user $USER with uid $USER_ID and groups $USER_GROUPS"
 					set_connect_home_quotas "$USER"
-					if [ "${USER_GROUPS#*ap23}" != "$USER_GROUPS" ]; then
-						# User has ap23 in their login group, go ahead and set the collab quota.
+					if [ "${USER_GROUPS#*collab.login-nodes}" != "$USER_GROUPS" ]; then
+						# User has collab logins in their login group, go ahead and set the collab quota.
 						set_path_collab_home_quotas
 					fi
 					set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
