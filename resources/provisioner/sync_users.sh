@@ -693,8 +693,8 @@ set_collab_data_quotas() {
 	else
 		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes "$DATADIR" 2>/dev/null)
 		if [ $? -ne 0 ]; then
-            echo "Setting Ceph quota of $((1024*1024*1024*1024)) bytes at $DATADIR"
-            setfattr -n ceph.quota.max_bytes -v $((1024 * 1024 * 1024 * 1024)) "$DATADIR"
+			echo "Setting Ceph quota of $((1024*1024*1024*1024)) bytes at $DATADIR"
+			setfattr -n ceph.quota.max_bytes -v $((1024 * 1024 * 1024 * 1024)) "$DATADIR"
 		else
 			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA - will not make changes"
 		fi
