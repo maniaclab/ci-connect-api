@@ -759,7 +759,9 @@ set_ssh_authorized_keys(){
    		cmp "$USER_HOME_DIR"/.ssh/authorized_keys.new "$USER_HOME_DIR"/.ssh/authorized_keys > /dev/null 2>&1
      		if [ $? -ne 0 ]; then  
 			mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
-   		fi
+   		else
+     			rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
+		fi
 	fi
 	# Ensure that the SSH dir has the right permissions
 	chmod 0700 "$USER_HOME_DIR/.ssh"
