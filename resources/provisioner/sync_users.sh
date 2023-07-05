@@ -748,7 +748,7 @@ set_ssh_authorized_keys(){
  	# will remain owned by root when moved into place, which would prevent logins.
 	echo "$USER_KEY_DATA" > "$USER_HOME_DIR/.ssh/authorized_keys.new"
  	chmod 0600 "$USER_HOME_DIR/.ssh/authorized_keys.new"
-	chown "$USER": "$USER_HOME_DIR"/.ssh/authorized_keys.new
+	chown "$USER": "$USER_HOME_DIR/.ssh/authorized_keys.new"
 	if [ $? -ne 0 ]; then
 		echo "Could not chown new authorized keys file. Is this user out of quota?"
 		rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
