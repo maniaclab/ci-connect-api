@@ -741,15 +741,25 @@ set_ssh_authorized_keys(){
 	fi
 	if [ ! -d "$USER_HOME_DIR/.ssh" ]; then
 		mkdir "$USER_HOME_DIR/.ssh"
+  		chown -R "$USER": "$USER_HOME_DIR/.ssh"
 	fi
+ 	# Create a temporary SSH key file, and check if we can succesfully chown it. 
+	# If we cannot, the user is probably out of quota and the authorized_keys files 
+ 	# will remain owned by root when moved into place, which would prevent logins.
 	echo "$USER_KEY_DATA" > "$USER_HOME_DIR/.ssh/authorized_keys.new"
-	chown -R "$USER": "$USER_HOME_DIR/.ssh"
-	chmod 0600 "$USER_HOME_DIR/.ssh/authorized_keys.new"
+ 	chmod 0600 "$USER_HOME_DIR/.ssh/authorized_keys.new"
+	chown "$USER": "$USER_HOME_DIR"/.ssh/authorized_keys.new
 	if [ $? -ne 0 ]; then
-		echo "Could not chmod new authorized keys file. Is this user out of quota?"
+		echo "Could not chown new authorized keys file. Is this user out of quota?"
 		rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
 	else
-		mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
+ 		# Compare the checksum of the new file to the old file. While the move 
+   		# is atomic, it triggers on many nodes simultaneously if $HOME is on a 
+     		# shared filesystem.
+   		cmp "$USER_HOME_DIR"/.ssh/authorized_keys.new "$USER_HOME_DIR"/.ssh/authorized_keys > /dev/null 2>&1
+     		if [ $? -ne 0 ]; then  
+			mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
+   		fi
 	fi
 	# Ensure that the SSH dir has the right permissions
 	chmod 0700 "$USER_HOME_DIR/.ssh"
