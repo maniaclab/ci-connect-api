@@ -801,7 +801,7 @@ set_google_authenticator_secret() {
 	echo "\" TOTP_AUTH" >> "$GOOG_AUTH_TMP"
 	chmod 0400 "$GOOG_AUTH_TMP"	
 	chown $USER: "$GOOG_AUTH_TMP"
-	if [ $? -ne 0 ]; 
+	if [ $? -ne 0 ]; then
 		echo "Could not chown new google authenticator file. Is this user out of quota?"
 		rm -f "$GOOG_AUTH_TMP"
 	else 
