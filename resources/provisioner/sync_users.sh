@@ -803,7 +803,7 @@ set_google_authenticator_secret() {
 	chown $USER: "$GOOG_AUTH_TMP"
 	if [ $? -ne 0 ]; 
 		echo "Could not chown new google authenticator file. Is this user out of quota?"
-		rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
+		rm -f "$GOOG_AUTH_TMP"
 	else 
 		mv "$GOOG_AUTH_TMP" "$USER_HOME_DIR/.google_authenticator"
 	fi
