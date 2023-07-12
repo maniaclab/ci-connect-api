@@ -565,7 +565,7 @@ set_path_collab_home_quotas(){
 
 set_collab_mfa_quotas(){
 	USER="$1"
-  	mkdir /var/lib/google_authenticator/"$USER"
+  	mkdir -p /var/lib/google_authenticator/"$USER"
 	chown "$USER": /var/lib/google_authenticator/"$USER"
 	CURRENT_AUTH_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/google_authenticator 2>/dev/null)
 	if [ $? -ne 0 ]; then
@@ -625,7 +625,7 @@ set_path_home_quotas(){
 }
 set_path_mfa_quotas(){
 	USER="$1"
-  	mkdir /var/lib/google_authenticator/"$USER"
+  	mkdir -p /var/lib/google_authenticator/"$USER"
 	chown "$USER": /var/lib/google_authenticator/"$USER"
 	CURRENT_AUTH_QUOTA=$(zfs get -Hp -o value userquota@"$USER" system/google_authenticator 2>/dev/null)
 	if [ $? -ne 0 ]; then
