@@ -563,6 +563,21 @@ set_path_collab_home_quotas(){
 	fi
 }
 
+set_collab_mfa_quotas(){
+	USER="$1"
+  	mkdir -p /var/lib/google_authenticator/"$USER"
+	chown "$USER": /var/lib/google_authenticator/"$USER"
+	CURRENT_AUTH_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/google_authenticator 2>/dev/null)
+	if [ $? -ne 0 ]; then
+  		echo "Getting ZFS quota for $USER at tank/google_authenticator failed"
+  	elif [ "$CURRENT_AUTH_QUOTA" == '-' ]; then
+  		echo "User creation failed for $USER, skipping quota creation for $USER on tank/google_authenticator"
+  	elif [ "$CURRENT_AUTH_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=1MB tank/google_authenticator
+	else
+  		echo "$USER already has a quota of $CURRENT_AUTH_QUOTA on tank/google_authenticator"
+     	fi
+
 set_af_home_quotas(){
 	USER="$1"
 	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" export/home 2>/dev/null)
@@ -608,7 +623,20 @@ set_path_home_quotas(){
 		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on system/home"
 	fi
 }
-
+set_path_mfa_quotas(){
+	USER="$1"
+  	mkdir -p /var/lib/google_authenticator/"$USER"
+	chown "$USER": /var/lib/google_authenticator/"$USER"
+	CURRENT_AUTH_QUOTA=$(zfs get -Hp -o value userquota@"$USER" system/google_authenticator 2>/dev/null)
+	if [ $? -ne 0 ]; then
+  		echo "Getting ZFS quota for $USER at system/google_authenticator failed"
+  	elif [ "$CURRENT_AUTH_QUOTA" == '-' ]; then
+  		echo "User creation failed for $USER, skipping quota creation for $USER on system/google_authenticator"
+  	elif [ "$CURRENT_AUTH_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=1MB system/google_authenticator
+	else
+  		echo "$USER already has a quota of $CURRENT_AUTH_QUOTA on system/google_authenticator"
+     	fi
 set_path_data_quotas(){
 	USER="$1"
 	mkdir -p /ospool/`hostname -s`/data/"$USER"
@@ -934,6 +962,7 @@ for USER in $USERS_TO_CREATE; do
 			fi
 			set_path_home_quotas "$USER"
 			set_path_data_quotas "$USER"
+   			set_path_mfa_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$(hostname -f)" == "ap23.uc.osg-htc.org" ]; then
 			echo "Creating user and ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
@@ -955,6 +984,8 @@ for USER in $USERS_TO_CREATE; do
 			# directory in ceph
 			set_collab_scratch_quotas "$USER"
 			set_collab_data_quotas "$USER"
+   			# Adding mfa directory
+   			set_collab_mfa_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (XFS)"
