@@ -569,7 +569,7 @@ set_collab_mfa_quotas(){
 	chown "$USER": /var/lib/google_authenticator/"$USER"
 	CURRENT_AUTH_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/google_authenticator 2>/dev/null)
 	if [ $? -ne 0 ]; then
-  		echo "ZFS dataset creation failed for $USER"
+  		echo "Getting ZFS quota for $USER at tank/google_authenticator failed"
   	elif [ "$CURRENT_AUTH_QUOTA" == '-' ]; then
   		echo "User creation failed for $USER, skipping quota creation for $USER on tank/google_authenticator"
   	elif [ "$CURRENT_AUTH_QUOTA" -eq 0 ]; then
@@ -629,7 +629,7 @@ set_path_mfa_quotas(){
 	chown "$USER": /var/lib/google_authenticator/"$USER"
 	CURRENT_AUTH_QUOTA=$(zfs get -Hp -o value userquota@"$USER" system/google_authenticator 2>/dev/null)
 	if [ $? -ne 0 ]; then
-  		echo "ZFS dataset creation failed for $USER"
+  		echo "Getting ZFS quota for $USER at system/google_authenticator failed"
   	elif [ "$CURRENT_AUTH_QUOTA" == '-' ]; then
   		echo "User creation failed for $USER, skipping quota creation for $USER on system/google_authenticator"
   	elif [ "$CURRENT_AUTH_QUOTA" -eq 0 ]; then
