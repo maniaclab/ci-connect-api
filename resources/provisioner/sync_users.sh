@@ -608,7 +608,20 @@ set_path_home_quotas(){
 		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on system/home"
 	fi
 }
-
+set_path_mfa_quotas(){
+	USER="$1"
+  	mkdir /var/lib/google_authenticator/"$USER"
+	chown "$USER": /var/lib/google_authenticator/"$USER"
+	CURRENT_AUTH_QUOTA=$(zfs get -Hp -o value userquota@"$USER" system/google_authenticator 2>/dev/null)
+	if [ $? -ne 0 ]; then
+  		echo "ZFS dataset creation failed for $USER"
+  	elif [ "$CURRENT_AUTH_QUOTA" == '-' ]; then
+  		echo "User creation failed for $USER, skipping quota creation for $USER on system/google_authenticator"
+  	elif [ "$CURRENT_AUTH_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=1MB system/google_authenticator
+	else
+  		echo "$USER already has a quota of $CURRENT_AUTH_QUOTA on system/google_authenticator"
+     	fi
 set_path_data_quotas(){
 	USER="$1"
 	mkdir -p /ospool/`hostname -s`/data/"$USER"
