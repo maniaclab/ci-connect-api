@@ -577,7 +577,7 @@ set_collab_mfa_quotas(){
 	else
   		echo "$USER already has a quota of $CURRENT_AUTH_QUOTA on tank/google_authenticator"
      	fi
-
+}
 set_af_home_quotas(){
 	USER="$1"
 	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" export/home 2>/dev/null)
@@ -637,6 +637,7 @@ set_path_mfa_quotas(){
 	else
   		echo "$USER already has a quota of $CURRENT_AUTH_QUOTA on system/google_authenticator"
      	fi
+}
 set_path_data_quotas(){
 	USER="$1"
 	mkdir -p /ospool/`hostname -s`/data/"$USER"
