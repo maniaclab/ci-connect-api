@@ -822,7 +822,7 @@ set_google_authenticator_secret() {
 	USER_HOME_DIR="$2"
 	USER_SECRET_DATA="$3"
 	echo "Creating/updating MFA secrets for $USER"
-	GOOG_AUTH_TMP="$USER_HOME_DIR/.google.authenticator.new"
+	GOOG_AUTH_TMP="/var/lib/google_authenticator/$USER/.google.authenticator.new"
 	echo "$3" >> $GOOG_AUTH_TMP
 	echo "\" RATE_LIMIT 3 30" >> "$GOOG_AUTH_TMP"
 	echo "\" WINDOW_SIZE 3" >> "$GOOG_AUTH_TMP"
@@ -834,7 +834,7 @@ set_google_authenticator_secret() {
 		echo "Could not chown new google authenticator file. Is this user out of quota?"
 		rm -f "$GOOG_AUTH_TMP"
 	else 
-		mv "$GOOG_AUTH_TMP" "$USER_HOME_DIR/.google_authenticator"
+		mv "$GOOG_AUTH_TMP" "/var/lib/google_authenticator/$USER/.google_authenticator"
 	fi
 }
 
