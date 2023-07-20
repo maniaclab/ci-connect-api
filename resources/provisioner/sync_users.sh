@@ -819,10 +819,10 @@ set_condor_token() {
 
 set_google_authenticator_secret() {
 	USER="$1"
-	USER_HOME_DIR="$2"
+	USER_SECRET_DIR="$2"
 	USER_SECRET_DATA="$3"
 	echo "Creating/updating MFA secrets for $USER"
-	GOOG_AUTH_TMP="/var/lib/google_authenticator/$USER/.google.authenticator.new"
+	GOOG_AUTH_TMP="$USER_SECRET_DIR/.google.authenticator.new"
 	echo "$3" >> $GOOG_AUTH_TMP
 	echo "\" RATE_LIMIT 3 30" >> "$GOOG_AUTH_TMP"
 	echo "\" WINDOW_SIZE 3" >> "$GOOG_AUTH_TMP"
@@ -834,7 +834,7 @@ set_google_authenticator_secret() {
 		echo "Could not chown new google authenticator file. Is this user out of quota?"
 		rm -f "$GOOG_AUTH_TMP"
 	else 
-		mv "$GOOG_AUTH_TMP" "/var/lib/google_authenticator/$USER/.google_authenticator"
+		mv "$GOOG_AUTH_TMP" "$USER_SECRET_DIR/.google_authenticator"
 	fi
 }
 
@@ -965,6 +965,9 @@ for USER in $USERS_TO_CREATE; do
 			set_path_data_quotas "$USER"
    			set_path_mfa_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
+   			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
+				set_google_authenticator_secret "$USER" "/var/lib/google_authenticator/${USER}" "$TOTP_SECRET" 
+			fi
 		elif [ "$(hostname -f)" == "ap23.uc.osg-htc.org" ]; then
 			echo "Creating user and ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
 			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER" 
@@ -988,6 +991,9 @@ for USER in $USERS_TO_CREATE; do
    			# Adding mfa directory
    			set_collab_mfa_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
+      			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
+				set_google_authenticator_secret "$USER" "/var/lib/google_authenticator/${USER}" "$TOTP_SECRET" 
+			fi
 		elif [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (XFS)"
 			useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
@@ -1066,9 +1072,6 @@ for USER in $USERS_TO_CREATE; do
 		# This will fail if the user doesn't have a homedir
 		#set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 		set_forward_file "$USER" "${HOME_DIR_ROOT}/${USER}" "$USER_EMAIL"
-		if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
-			set_google_authenticator_secret "$USER" "${HOME_DIR_ROOT}/${USER}" "$TOTP_SECRET" 
-		fi
 		if [ "$(hostname -f)" == "login04.osgconnect.net" -o "$(hostname -f)" == "login05.osgconnect.net" ]; then
 			set_osg_disk_quotas "$USER"
 		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
