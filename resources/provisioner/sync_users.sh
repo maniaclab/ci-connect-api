@@ -1134,7 +1134,7 @@ for USER in $USERS_TO_UPDATE; do
 		#set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 		set_forward_file "$USER" "${HOME_DIR_ROOT}/${USER}" "$USER_EMAIL"
 		if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
-			set_google_authenticator_secret "$USER" "${HOME_DIR_ROOT}/${USER}" "$TOTP_SECRET" 
+			set_google_authenticator_secret "$USER" "/var/lib/google_authenticator/${USER}" "$TOTP_SECRET"
 		fi
 	fi
 	ACTUAL_USER_ID=$(id -u "$USER")
