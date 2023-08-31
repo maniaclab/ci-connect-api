@@ -852,7 +852,7 @@ set_storage_authzdb_file(){
 	GROUP_ID="$3"
 	MAP_FILE="$4"
 	STORAGE_PATH="$5"
-	echo "authorize $USER read-write $USER_ID $GROUP_ID / /$STORAGE_PATH /" >> $MAP_FILE
+	echo "authorize $USER read-write $USER_ID $GROUP_ID / / /" >> $MAP_FILE
 }
 
 set_default_project(){
