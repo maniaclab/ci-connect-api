@@ -533,6 +533,7 @@ crow::response getUserInfo(PersistentStore& store, const crow::request& req, con
 		else
 			metadata.AddMember("totp_secret", "", alloc);
 	}
+	metadata.AddMember("globus_id", targetUser.globusID, alloc);
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
 	metadata.AddMember("unix_id", targetUser.unixID, alloc);
 	metadata.AddMember("join_date", targetUser.joinDate, alloc);
