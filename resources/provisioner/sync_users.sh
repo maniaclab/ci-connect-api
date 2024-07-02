@@ -757,6 +757,19 @@ set_cms_user_quotas() {
 	fi
 }
 
+set_cms_mfa_quotas(){
+	USER="$1"
+    AUTHDIR="/var/lib/google_authenticator/$USER"
+  	mkdir -p "$AUTHDIR"
+	chown "$USER": "$AUTHDIR"
+	CURRENT_AUTH_QUOTA=$(xfs_quota -x -c 'report' "$AUTHDIR" | grep "$USER")
+	if [ $? -ne 0 ]; then
+		xfs_quota -x -c "limit -u bsoft=1000000 bhard=1000000 $USER" "$AUTHDIR"
+	else
+		echo "$USER already has a quota of $(echo "$CURRENT_XFS_QUOTA" | awk '{print $3}')"
+	fi
+}
+
 set_sptlocal_disk_quotas(){
 	USER="$1"
 	zfs create tank/sptlocal/user/"$USER"
@@ -1035,6 +1048,7 @@ for USER in $USERS_TO_CREATE; do
 			# directory in ceph
 			set_cms_scratch_quotas "$USER"
 			set_cms_user_quotas "$USER"
+			set_cms_mfa_quotas "$USER"
    			# Adding mfa directory
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
       			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
