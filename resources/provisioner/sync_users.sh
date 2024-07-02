@@ -730,6 +730,33 @@ set_collab_data_quotas() {
 	fi
 }
 
+set_cms_scratch_quotas() {
+	mkdir -p /scratch/"$USER" && chown "$USER": /scratch/"$USER"
+	CURRENT_XFS_QUOTA=$(xfs_quota -x -c 'report' /scratch | grep "$USER")
+	if [ $? -ne 0 ]; then
+		xfs_quota -x -c "limit -u bsoft=50000000000 bhard=100000000000 $USER" /scratch
+	else
+		echo "$USER already has a quota of $(echo "$CURRENT_XFS_QUOTA" | awk '{print $3}')"
+	fi
+}
+
+set_cms_user_quotas() {
+	DATADIR=/ospool/cms-user/"$USER"
+	mkdir -p "$DATADIR" && chown "$USER": "$DATADIR"
+	which getfattr >/dev/null 2>&1 # requires 'attr' package, not installed by default on EL
+	if [ "$?" -ne 0 ]; then
+		echo "getfattr(1) is not installed or not in PATH. Cannot set Ceph quota. Try installing 'attr'?"
+	else
+		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes "$DATADIR" 2>/dev/null)
+		if [ $? -ne 0 ]; then
+			echo "Setting Ceph quota of $((1024*1024*1024*1024)) bytes at $DATADIR"
+			setfattr -n ceph.quota.max_bytes -v $((1024 * 1024 * 1024 * 1024)) "$DATADIR"
+		else
+			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA - will not make changes"
+		fi
+	fi
+}
+
 set_sptlocal_disk_quotas(){
 	USER="$1"
 	zfs create tank/sptlocal/user/"$USER"
@@ -751,12 +778,6 @@ set_sptgrid_disk(){
 	GROUP_ID="$3"
 	chimera mkdir /sptgrid/user/"$USER"
 	chimera chown "$USER_ID":"$GROUP_ID" /sptgrid/user/"$USER"
-}
-
-set_stash_disk(){
-	USER="$1"
-	mkdir -p /stash/user/"$USER"
-	chown "$USER": /stash/user/"$USER"
 }
 
 set_ssh_authorized_keys(){
@@ -994,6 +1015,31 @@ for USER in $USERS_TO_CREATE; do
       			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
 				set_google_authenticator_secret "$USER" "/var/lib/google_authenticator/${USER}" "$TOTP_SECRET" 
 			fi
+		elif [ "$(hostname -f)" == "login.uscms.org" ]; then
+			echo "Creating user for user $USER with uid $USER_ID and groups $USER_GROUPS"
+			useradd -m -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			if [ "$?" -ne 0 ]; then
+				echo "Failed to create user $USER" 1>&2
+				cat existing_users new_users | sort | uniq > existing_users.new
+				mv existing_users.new existing_users
+				if [ "$?" -ne 0 ]; then
+					echo "Failed to replace existing_users file" 1>&2
+					release_lock
+					exit 1
+				fi
+				rm new_users
+				release_lock
+				exit 1
+			fi
+			# CMS is distinct by having a dedicated /scratch vol and user
+			# directory in ceph
+			set_cms_scratch_quotas "$USER"
+			set_cms_user_quotas "$USER"
+   			# Adding mfa directory
+			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
+      			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
+				set_google_authenticator_secret "$USER" "/var/lib/google_authenticator/${USER}" "$TOTP_SECRET" 
+			fi
 		elif [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (XFS)"
 			useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
@@ -1072,11 +1118,6 @@ for USER in $USERS_TO_CREATE; do
 		# This will fail if the user doesn't have a homedir
 		#set_default_project "$USER" "${HOME_DIR_ROOT}/${USER}" "$DEFAULT_GROUP"
 		set_forward_file "$USER" "${HOME_DIR_ROOT}/${USER}" "$USER_EMAIL"
-		if [ "$(hostname -f)" == "login04.osgconnect.net" -o "$(hostname -f)" == "login05.osgconnect.net" ]; then
-			set_osg_disk_quotas "$USER"
-		elif [ "$GROUP_ROOT_GROUP" == "root.cms" -o "$GROUP_ROOT_GROUP" == "root.duke" ]; then
-			set_stash_disk "$USER"
-		fi
 		if [ "$GROUP_ROOT_GROUP" == "root.snowmass21" ]; then
 			set_snowmass_quotas "$USER"
 			set_collab_quotas "$USER"
