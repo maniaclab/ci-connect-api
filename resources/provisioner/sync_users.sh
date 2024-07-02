@@ -1028,7 +1028,7 @@ for USER in $USERS_TO_CREATE; do
       			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
 				set_google_authenticator_secret "$USER" "/var/lib/google_authenticator/${USER}" "$TOTP_SECRET" 
 			fi
-		elif [ "$(hostname -f)" == "login.uscms.org" ]; then
+        elif [ "$(hostname -f)" == "login.uscms.org" -o "$(hostname -f)" == "login-el7.uscms.org" ]; then
 			echo "Creating user for user $USER with uid $USER_ID and groups $USER_GROUPS"
 			useradd -m -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
