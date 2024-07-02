@@ -759,7 +759,7 @@ set_cms_user_quotas() {
 
 set_cms_mfa_quotas(){
 	USER="$1"
-    AUTHDIR="/var/lib/google_authenticator/$USER"
+	AUTHDIR="/var/lib/google_authenticator/$USER"
   	mkdir -p "$AUTHDIR"
 	chown "$USER": "$AUTHDIR"
 	CURRENT_AUTH_QUOTA=$(xfs_quota -x -c 'report' "$AUTHDIR" | grep "$USER")
