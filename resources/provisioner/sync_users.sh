@@ -762,12 +762,12 @@ set_cms_mfa_quotas(){
 	AUTHDIR="/var/lib/google_authenticator/$USER"
   	mkdir -p "$AUTHDIR"
 	chown "$USER": "$AUTHDIR"
-	CURRENT_AUTH_QUOTA=$(xfs_quota -x -c 'report' "$AUTHDIR" | grep "$USER")
-	if [ $? -ne 0 ]; then
-		xfs_quota -x -c "limit -u bsoft=1000000 bhard=1000000 $USER" "$AUTHDIR"
-	else
-		echo "$USER already has a quota of $(echo "$CURRENT_XFS_QUOTA" | awk '{print $3}')"
-	fi
+	#CURRENT_AUTH_QUOTA=$(xfs_quota -x -c 'report' "$AUTHDIR" | grep "$USER")
+	#if [ $? -ne 0 ]; then
+	#	xfs_quota -x -c "limit -u bsoft=1000000 bhard=1000000 $USER" "$AUTHDIR"
+	#else
+	#	echo "$USER already has a quota of $(echo "$CURRENT_XFS_QUOTA" | awk '{print $3}')"
+	#fi
 }
 
 set_sptlocal_disk_quotas(){
