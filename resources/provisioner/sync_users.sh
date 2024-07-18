@@ -557,7 +557,7 @@ set_path_collab_home_quotas(){
 	elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
 		echo "User creation failed for $USER, skipping quota creation for $USER on export/home"
 	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-		zfs set userquota@"$USER"=100GB tank/export/path/"$USER"
+		zfs set userquota@"$USER"=100GB tank/export/path
 	else
 		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA"
 	fi
@@ -961,7 +961,7 @@ for USER in $USERS_TO_CREATE; do
 					set_connect_home_quotas "$USER"
 					if [ "${USER_GROUPS#*collab.login-nodes}" != "$USER_GROUPS" ]; then
 						# User has collab logins in their login group, go ahead and set the collab quota.
-						set_path_collab_home_quotas
+						set_path_collab_home_quotas "$USER_ID"
 					fi
 					set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 				fi
