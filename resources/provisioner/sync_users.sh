@@ -779,7 +779,7 @@ set_sptlocal_disk_quotas(){
 	if [ $? -ne 0 ]; then
 		echo "ZFS dataset creation failed for $USER"
 	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-		zfs set userquota@"$USER"=1TB tank/sptlocal/user/"$USER"
+		zfs set userquota@"$USER"=5TB tank/sptlocal/user/"$USER"
 	else
 		echo "$USER already has a quota of $CURRENT_ZFS_QUOTA"
 	fi
