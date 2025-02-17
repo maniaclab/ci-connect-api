@@ -821,20 +821,20 @@ set_ssh_authorized_keys(){
 			# is atomic, it triggers on many nodes simultaneously if $HOME is on a 
 				# shared filesystem.
 			cmp "$USER_HOME_DIR"/.ssh/authorized_keys.new "$USER_HOME_DIR"/.ssh/authorized_keys > /dev/null 2>&1
-				if [ $? -ne 0 ]; then  
+    		if [ $? -ne 0 ]; then  
 				mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
 			else
-					rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
+			    rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
 			fi
 		fi
 		# Ensure that the SSH dir has the right permissions
 		chmod 0700 "$USER_HOME_DIR/.ssh"
 	else
 		echo "$USER/.ssh/authorized_keys.new exists already, check if it needs cleanup"
-		# The file might be old, see if it needs cleaned up
-		ctime=$(stat -c %W "$USER_HOME_DIR/.ssh/authorized_keys.new")
+		# The file might be old, see if it needs cleaned up.
+		mtime=$(stat -c %Y "$USER_HOME_DIR/.ssh/authorized_keys.new")
 		now=$(date +%s)
-		if [ $((now - ctime)) -gt $((60 * 60)) ]; then
+		if [ $((now - mtime)) -gt $((60 * 60)) ]; then
 			echo "$USER/.ssh/authorized_keys.new stale, deleting"
 			rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
 		fi
