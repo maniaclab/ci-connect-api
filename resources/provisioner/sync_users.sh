@@ -806,28 +806,39 @@ set_ssh_authorized_keys(){
 		mkdir "$USER_HOME_DIR/.ssh"
   		chown -R "$USER": "$USER_HOME_DIR/.ssh"
 	fi
- 	# Create a temporary SSH key file, and check if we can succesfully chown it. 
-	# If we cannot, the user is probably out of quota and the authorized_keys files 
- 	# will remain owned by root when moved into place, which would prevent logins.
-	echo "$USER_KEY_DATA" > "$USER_HOME_DIR/.ssh/authorized_keys.new"
- 	chmod 0600 "$USER_HOME_DIR/.ssh/authorized_keys.new"
-	chown "$USER": "$USER_HOME_DIR/.ssh/authorized_keys.new"
-	if [ $? -ne 0 ]; then
-		echo "Could not chown new authorized keys file. Is this user out of quota?"
-		rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
+	if [ ! -f "$USER_HOME_DIR/.ssh/authorized_keys.new" ]; then
+		# Create a temporary SSH key file, and check if we can succesfully chown it. 
+		# If we cannot, the user is probably out of quota and the authorized_keys files 
+		# will remain owned by root when moved into place, which would prevent logins.
+		echo "$USER_KEY_DATA" > "$USER_HOME_DIR/.ssh/authorized_keys.new"
+		chmod 0600 "$USER_HOME_DIR/.ssh/authorized_keys.new"
+		chown "$USER": "$USER_HOME_DIR/.ssh/authorized_keys.new"
+		if [ $? -ne 0 ]; then
+			echo "Could not chown new authorized keys file. Is this user out of quota?"
+			rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
+		else
+			# Compare the checksum of the new file to the old file. While the move 
+			# is atomic, it triggers on many nodes simultaneously if $HOME is on a 
+				# shared filesystem.
+			cmp "$USER_HOME_DIR"/.ssh/authorized_keys.new "$USER_HOME_DIR"/.ssh/authorized_keys > /dev/null 2>&1
+				if [ $? -ne 0 ]; then  
+				mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
+			else
+					rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
+			fi
+		fi
+		# Ensure that the SSH dir has the right permissions
+		chmod 0700 "$USER_HOME_DIR/.ssh"
 	else
- 		# Compare the checksum of the new file to the old file. While the move 
-   		# is atomic, it triggers on many nodes simultaneously if $HOME is on a 
-     		# shared filesystem.
-   		cmp "$USER_HOME_DIR"/.ssh/authorized_keys.new "$USER_HOME_DIR"/.ssh/authorized_keys > /dev/null 2>&1
-     		if [ $? -ne 0 ]; then  
-			mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
-   		else
-     			rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
+		echo "$USER/.ssh/authorized_keys.new exists already, check if it needs cleanup"
+		# The file might be old, see if it needs cleaned up
+		ctime=$(stat -c %W "$USER_HOME_DIR/.ssh/authorized_keys.new")
+		now=$(date +%s)
+		if [ $((now - ctime)) -gt $((60 * 60)) ]; then
+			echo "$USER/.ssh/authorized_keys.new stale, deleting"
+			rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
 		fi
 	fi
-	# Ensure that the SSH dir has the right permissions
-	chmod 0700 "$USER_HOME_DIR/.ssh"
 }
 
 set_condor_token() {
