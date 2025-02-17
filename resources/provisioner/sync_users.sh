@@ -866,20 +866,22 @@ set_google_authenticator_secret() {
 	USER="$1"
 	USER_SECRET_DIR="$2"
 	USER_SECRET_DATA="$3"
-	echo "Creating/updating MFA secrets for $USER"
-	GOOG_AUTH_TMP="$USER_SECRET_DIR/.google.authenticator.new"
-	echo "$3" >> $GOOG_AUTH_TMP
-	echo "\" RATE_LIMIT 3 30" >> "$GOOG_AUTH_TMP"
-	echo "\" WINDOW_SIZE 3" >> "$GOOG_AUTH_TMP"
-	echo "\" DISALLOW_REUSE" >> "$GOOG_AUTH_TMP"
-	echo "\" TOTP_AUTH" >> "$GOOG_AUTH_TMP"
-	chmod 0400 "$GOOG_AUTH_TMP"	
-	chown $USER: "$GOOG_AUTH_TMP"
-	if [ $? -ne 0 ]; then
-		echo "Could not chown new google authenticator file. Is this user out of quota?"
-		rm -f "$GOOG_AUTH_TMP"
-	else 
-		mv "$GOOG_AUTH_TMP" "$USER_SECRET_DIR/.google_authenticator"
+	if [ -d "$USER_SECRET_DIR" ]; then
+		echo "Creating/updating MFA secrets for $USER"
+		GOOG_AUTH_TMP="$USER_SECRET_DIR/.google.authenticator.new"
+		echo "$3" >> $GOOG_AUTH_TMP
+		echo "\" RATE_LIMIT 3 30" >> "$GOOG_AUTH_TMP"
+		echo "\" WINDOW_SIZE 3" >> "$GOOG_AUTH_TMP"
+		echo "\" DISALLOW_REUSE" >> "$GOOG_AUTH_TMP"
+		echo "\" TOTP_AUTH" >> "$GOOG_AUTH_TMP"
+		chmod 0400 "$GOOG_AUTH_TMP"	
+		chown $USER: "$GOOG_AUTH_TMP"
+		if [ $? -ne 0 ]; then
+			echo "Could not chown new google authenticator file. Is this user out of quota?"
+			rm -f "$GOOG_AUTH_TMP"
+		else 
+			mv "$GOOG_AUTH_TMP" "$USER_SECRET_DIR/.google_authenticator"
+		fi
 	fi
 }
 
