@@ -804,7 +804,7 @@ set_ssh_authorized_keys(){
 	fi
 	if [ ! -d "$USER_HOME_DIR/.ssh" ]; then
 		mkdir "$USER_HOME_DIR/.ssh"
-  		chown -R "$USER": "$USER_HOME_DIR/.ssh"
+		chown -R "$USER": "$USER_HOME_DIR/.ssh"
 	fi
 	if [ ! -f "$USER_HOME_DIR/.ssh/authorized_keys.new" ]; then
 		# Create a temporary SSH key file, and check if we can succesfully chown it. 
@@ -821,10 +821,10 @@ set_ssh_authorized_keys(){
 			# is atomic, it triggers on many nodes simultaneously if $HOME is on a 
 				# shared filesystem.
 			cmp "$USER_HOME_DIR"/.ssh/authorized_keys.new "$USER_HOME_DIR"/.ssh/authorized_keys > /dev/null 2>&1
-    		if [ $? -ne 0 ]; then  
+			if [ $? -ne 0 ]; then  
 				mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
 			else
-			    rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
+				rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
 			fi
 		fi
 		# Ensure that the SSH dir has the right permissions
