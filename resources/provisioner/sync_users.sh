@@ -829,12 +829,12 @@ set_ssh_authorized_keys(){
 		# Ensure that the SSH dir has the right permissions
 		chmod 0700 "$USER_HOME_DIR/.ssh"
 	else
-		echo "$USER/.ssh/authorized_keys.new exists already, check if it needs cleanup"
+		echo "Warning: $USER/.ssh/authorized_keys.new exists already"
 		# The file might be old, see if it needs cleaned up.
 		mtime=$(stat -c %Y "$USER_HOME_DIR/.ssh/authorized_keys.new")
 		now=$(date +%s)
 		if [ $((now - mtime)) -gt $((60 * 60)) ]; then
-			echo "$USER/.ssh/authorized_keys.new stale, deleting"
+			echo "Warning: $USER/.ssh/authorized_keys.new stale, deleting"
 			rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
 		fi
 	fi
