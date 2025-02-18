@@ -291,7 +291,6 @@ if [ "$?" -ne 0 ]; then
 fi
 REQUEST_END=$(date "+%s.%N")
 echo "$REQUEST_START $REQUEST_END" | awk '{print "Request took",($2-$1),"seconds"}'
-cat group_members.json
 if [ -s group_members.json ]; then
 	if jq -es 'if . == [] then null else .[] | .memberships end' group_members.json > /dev/null ; then
 		: # file okay
@@ -819,7 +818,7 @@ set_ssh_authorized_keys(){
 		else
 			# Compare the checksum of the new file to the old file. While the move 
 			# is atomic, it triggers on many nodes simultaneously if $HOME is on a 
-				# shared filesystem.
+			# shared filesystem.
 			cmp "$USER_HOME_DIR"/.ssh/authorized_keys.new "$USER_HOME_DIR"/.ssh/authorized_keys > /dev/null 2>&1
 			if [ $? -ne 0 ]; then  
 				mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
