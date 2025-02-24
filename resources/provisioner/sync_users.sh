@@ -805,6 +805,11 @@ set_ssh_authorized_keys(){
 		mkdir "$USER_HOME_DIR/.ssh"
 		chown -R "$USER": "$USER_HOME_DIR/.ssh"
 	fi
+	if [ $(stat -c %u $USER_HOME_DIR/.ssh/authorized_keys) -eq 0 ]; then 
+		echo "Warning: Repairing $USER SSH key ownership"
+		chown "$USER": "$USER_HOME_DIR/.ssh"
+		chown "$USER": "$USER_HOME_DIR"/.ssh/authorized_keys
+	fi
 	if [ ! -f "$USER_HOME_DIR/.ssh/authorized_keys.new" ]; then
 		# Create a temporary SSH key file, and check if we can succesfully chown it. 
 		# If we cannot, the user is probably out of quota and the authorized_keys files 
