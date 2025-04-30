@@ -86,5 +86,7 @@ std::string to_string(const JSONDocument& json){
 	return buf.GetString();
 }
 
+//Check if a command is intended to be silent and not send email
+bool isSilent(const crow::request& req);
 
 #endif //SLATE_SERVER_UTILITIES_H

@@ -58,17 +58,6 @@ crow::response listUsers(PersistentStore& store, const crow::request& req){
 
 //namespace{
 
-// Check if the requester wants "silent" mode to prevent emails from being
-// sent, useful for bulk actions on inactive users
-bool isSilent(const crow::request& req) {
-	bool silent = false;
-	auto value = req.url_params.get("silent");
-	if (value != nullptr && std::string(value) == "true") {
-	    silent = true;
-	}
-	return silent;
-}
-
 ///Check that a string looks like one or more SSH keys. 
 ///Note that this does not validate that the key type(s) claimed is(are) valid,
 ///or that the key data makes any sense. 

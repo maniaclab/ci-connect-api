@@ -85,3 +85,14 @@ std::vector<std::string> string_split_columns(const std::string& line, char deli
     }
     return tokens;
 }
+
+// Check if the requester wants "silent" mode to prevent emails from being
+// sent, useful for bulk actions on inactive users
+bool isSilent(const crow::request& req) {
+	bool silent = false;
+	auto value = req.url_params.get("silent");
+	if (value != nullptr && std::string(value) == "true") {
+		silent = true;
+	}
+	return silent;
+}

@@ -33,7 +33,6 @@ crow::response updateLastUseTime(PersistentStore& store, const crow::request& re
                                  const std::string uID);
                                  
 bool validateSSHKeys(const std::string& keyData);
-bool isSilent(const crow::request& req);
 
 ///\param userID the user whose admin status should be checked
 ///\param groupName the name of the group whose parent groups should be checked 
