@@ -688,18 +688,20 @@ crow::response deleteUser(PersistentStore& store, const crow::request& req, cons
 	
 	if(!deleted)
 		return crow::response(500,generateError("User account deletion failed"));
-	
+
 	//send email notification
-	EmailClient::Email message;
-	message.fromAddress="noreply@api.ci-connect.net";
-	message.toAddresses={targetUser.email};
-	message.subject="CI-Connect account deleted";
-	message.body="This is an automatic notification that your CI-Connect user "
-	"account ("+targetUser.unixName+") has been deleted";
-	if(user!=targetUser)
-		message.body+=" by "+user.name;
-	message.body+=".";
-	store.getEmailClient().sendEmail(message);	
+	if(!silentMode(req)) {
+		EmailClient::Email message;
+		message.fromAddress="noreply@api.ci-connect.net";
+		message.toAddresses={targetUser.email};
+		message.subject="CI-Connect account deleted";
+		message.body="This is an automatic notification that your CI-Connect user "
+		"account ("+targetUser.unixName+") has been deleted";
+		if(user!=targetUser)
+			message.body+=" by "+user.name;
+		message.body+=".";
+		store.getEmailClient().sendEmail(message);
+	}
 	
 	return(crow::response(200));
 }
@@ -932,6 +934,7 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 	//	ensureEnclosingMembership(store,membership.userName,membership.groupName,membership.stateSetBy);	
 	
 	//If the user is requesting to join a group, notify the group admins. 
+	//Note that silent mode isn't used here, admins should always get emails
 	if(currentStatus.state==GroupMembership::NonMember && membership.state==GroupMembership::Pending){
 		EmailClient::Email adminMessage;
 		adminMessage.fromAddress="noreply@api.ci-connect.net";
@@ -954,45 +957,53 @@ crow::response setUserStatusInGroup(PersistentStore& store, const crow::request&
 		//group address is on the freshdesk.com domain, we assume that FreshDesk
 		//will send a notification email to the user on its own, so we should
 		//not send one directly. 
-		if(group.email.find("freshdesk.com")==std::string::npos){
-			EmailClient::Email userMessage;
-			userMessage.subject=adminMessage.subject;
-			userMessage.fromAddress="noreply@api.ci-connect.net";
-			userMessage.toAddresses={targetUser.email};
-			userMessage.replyTo=group.email;
-			userMessage.body="This is an automatic notification that your request to join the "
-							 +group.displayName+" group is being processed.";
-			store.getEmailClient().sendEmail(userMessage);
+		if(!silentMode(req)){
+			if(group.email.find("freshdesk.com")==std::string::npos){
+				EmailClient::Email userMessage;
+				userMessage.subject=adminMessage.subject;
+				userMessage.fromAddress="noreply@api.ci-connect.net";
+				userMessage.toAddresses={targetUser.email};
+				userMessage.replyTo=group.email;
+				userMessage.body="This is an automatic notification that your request to join the "
+								 +group.displayName+" group is being processed.";
+				store.getEmailClient().sendEmail(userMessage);
+			}
 		}
 	}
 	else if(membership.state==GroupMembership::Active){
-		EmailClient::Email message;
-		message.fromAddress="noreply@api.ci-connect.net";
-		message.toAddresses={targetUser.email};
-		message.subject="CI-Connect group membership change";
-		message.body="This is an automatic notification that your account ("+
-		             targetUser.unixName+") is now an active member of the \""+
-		             group.displayName+"\" Connect group.";
-		store.getEmailClient().sendEmail(message);
+		if(!silentMode(req)){
+			EmailClient::Email message;
+			message.fromAddress="noreply@api.ci-connect.net";
+			message.toAddresses={targetUser.email};
+			message.subject="CI-Connect group membership change";
+			message.body="This is an automatic notification that your account ("+
+						 targetUser.unixName+") is now an active member of the \""+
+						 group.displayName+"\" Connect group.";
+			store.getEmailClient().sendEmail(message);
+		}
 	}
 	else if(membership.state==GroupMembership::Admin){
-		EmailClient::Email message;
-		message.fromAddress="noreply@api.ci-connect.net";
-		message.toAddresses={targetUser.email};
-		message.subject="CI-Connect group membership change";
-		message.body="This is an automatic notification that your account ("+
-		             targetUser.unixName+") is now an admin member of the \""+
-		             group.displayName+"\" Connect group.";
-		store.getEmailClient().sendEmail(message);
+		if(!silentMode(req)){
+			EmailClient::Email message;
+			message.fromAddress="noreply@api.ci-connect.net";
+			message.toAddresses={targetUser.email};
+			message.subject="CI-Connect group membership change";
+			message.body="This is an automatic notification that your account ("+
+						 targetUser.unixName+") is now an admin member of the \""+
+						 group.displayName+"\" Connect group.";
+			store.getEmailClient().sendEmail(message);
+		}
 	}
 	else{ //otherwise just inform the user with a generic message
-		EmailClient::Email message;
-		message.fromAddress="noreply@api.ci-connect.net";
-		message.toAddresses={targetUser.email};
-		message.subject="CI-Connect group membership change";
-		message.body="This is an automatic notification that your membership in the "+
-		group.displayName+" group has been set to \""+GroupMembership::to_string(membership.state)+"\".";
-		store.getEmailClient().sendEmail(message);
+		if(!silentMode(req)){
+			EmailClient::Email message;
+			message.fromAddress="noreply@api.ci-connect.net";
+			message.toAddresses={targetUser.email};
+			message.subject="CI-Connect group membership change";
+			message.body="This is an automatic notification that your membership in the "+
+			group.displayName+" group has been set to \""+GroupMembership::to_string(membership.state)+"\".";
+			store.getEmailClient().sendEmail(message);
+		}
 	}
 	
 	return(crow::response(200));
@@ -1049,27 +1060,29 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 	if(!success)
 		return crow::response(500,generateError("User removal from Group failed"));
 		
-	if(currentStatus.state==GroupMembership::Pending){
-		EmailClient::Email mail;
-		mail.fromAddress="noreply@api.ci-connect.net";
-		mail.toAddresses={targetUser.email};
-		mail.subject="CI-Connect group membership request denied";
-		mail.body="This is an automatic notification that your request to join the "+
-		groupID+" group has been denied by the group administrators.";
-		if(!message.empty())
-			mail.body+="\n\nThe following reason was given: \""+message+"\"";
-		store.getEmailClient().sendEmail(mail);
-	}
-	else{
-		EmailClient::Email mail;
-		mail.fromAddress="noreply@api.ci-connect.net";
-		mail.toAddresses={targetUser.email};
-		mail.subject="CI-Connect group membership change";
-		mail.body="This is an automatic notification that your account has been removed from the "+
-		groupID+" group.";
-		if(!message.empty())
-			mail.body+="\n\nThe following reason was given: \""+message+"\"";
-		store.getEmailClient().sendEmail(mail);
+	if(!silentMode(req)) {
+		if(currentStatus.state==GroupMembership::Pending){
+			EmailClient::Email mail;
+			mail.fromAddress="noreply@api.ci-connect.net";
+			mail.toAddresses={targetUser.email};
+			mail.subject="CI-Connect group membership request denied";
+			mail.body="This is an automatic notification that your request to join the "+
+			groupID+" group has been denied by the group administrators.";
+			if(!message.empty())
+				mail.body+="\n\nThe following reason was given: \""+message+"\"";
+			store.getEmailClient().sendEmail(mail);
+		}
+		else{
+			EmailClient::Email mail;
+			mail.fromAddress="noreply@api.ci-connect.net";
+			mail.toAddresses={targetUser.email};
+			mail.subject="CI-Connect group membership change";
+			mail.body="This is an automatic notification that your account has been removed from the "+
+			groupID+" group.";
+			if(!message.empty())
+				mail.body+="\n\nThe following reason was given: \""+message+"\"";
+			store.getEmailClient().sendEmail(mail);
+		}
 	}
 	
 	return(crow::response(200));
