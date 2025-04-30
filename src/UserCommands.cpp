@@ -690,7 +690,7 @@ crow::response deleteUser(PersistentStore& store, const crow::request& req, cons
 		return crow::response(500,generateError("User account deletion failed"));
 
 	//send email notification
-	if(!isSilent(req)) {
+	if(!silentMode(req)) {
 		EmailClient::Email message;
 		message.fromAddress="noreply@api.ci-connect.net";
 		message.toAddresses={targetUser.email};
@@ -1060,7 +1060,7 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 	if(!success)
 		return crow::response(500,generateError("User removal from Group failed"));
 		
-	if(!isSilent(req)) {
+	if(!silentMode(req)) {
 		if(currentStatus.state==GroupMembership::Pending){
 			EmailClient::Email mail;
 			mail.fromAddress="noreply@api.ci-connect.net";
