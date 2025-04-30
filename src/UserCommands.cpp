@@ -58,6 +58,17 @@ crow::response listUsers(PersistentStore& store, const crow::request& req){
 
 //namespace{
 
+// Check if the requester wants "silent" mode to prevent emails from being
+// sent, useful for bulk actions on inactive users
+bool isSilent(const crow::request& req) {
+	bool silent = false;
+	auto value = req.url_params.get("silent");
+	if (value != nullptr && std::string(value) == "true") {
+	    silent = true;
+	}
+	return silent;
+}
+
 ///Check that a string looks like one or more SSH keys. 
 ///Note that this does not validate that the key type(s) claimed is(are) valid,
 ///or that the key data makes any sense. 
@@ -688,18 +699,20 @@ crow::response deleteUser(PersistentStore& store, const crow::request& req, cons
 	
 	if(!deleted)
 		return crow::response(500,generateError("User account deletion failed"));
-	
+
 	//send email notification
-	EmailClient::Email message;
-	message.fromAddress="noreply@api.ci-connect.net";
-	message.toAddresses={targetUser.email};
-	message.subject="CI-Connect account deleted";
-	message.body="This is an automatic notification that your CI-Connect user "
-	"account ("+targetUser.unixName+") has been deleted";
-	if(user!=targetUser)
-		message.body+=" by "+user.name;
-	message.body+=".";
-	store.getEmailClient().sendEmail(message);	
+	if(!isSilent(req)) {
+		EmailClient::Email message;
+		message.fromAddress="noreply@api.ci-connect.net";
+		message.toAddresses={targetUser.email};
+		message.subject="CI-Connect account deleted";
+		message.body="This is an automatic notification that your CI-Connect user "
+		"account ("+targetUser.unixName+") has been deleted";
+		if(user!=targetUser)
+			message.body+=" by "+user.name;
+		message.body+=".";
+		store.getEmailClient().sendEmail(message);
+	}
 	
 	return(crow::response(200));
 }
@@ -1049,27 +1062,29 @@ crow::response removeUserFromGroup(PersistentStore& store, const crow::request& 
 	if(!success)
 		return crow::response(500,generateError("User removal from Group failed"));
 		
-	if(currentStatus.state==GroupMembership::Pending){
-		EmailClient::Email mail;
-		mail.fromAddress="noreply@api.ci-connect.net";
-		mail.toAddresses={targetUser.email};
-		mail.subject="CI-Connect group membership request denied";
-		mail.body="This is an automatic notification that your request to join the "+
-		groupID+" group has been denied by the group administrators.";
-		if(!message.empty())
-			mail.body+="\n\nThe following reason was given: \""+message+"\"";
-		store.getEmailClient().sendEmail(mail);
-	}
-	else{
-		EmailClient::Email mail;
-		mail.fromAddress="noreply@api.ci-connect.net";
-		mail.toAddresses={targetUser.email};
-		mail.subject="CI-Connect group membership change";
-		mail.body="This is an automatic notification that your account has been removed from the "+
-		groupID+" group.";
-		if(!message.empty())
-			mail.body+="\n\nThe following reason was given: \""+message+"\"";
-		store.getEmailClient().sendEmail(mail);
+	if(!isSilent(req)) {
+		if(currentStatus.state==GroupMembership::Pending){
+			EmailClient::Email mail;
+			mail.fromAddress="noreply@api.ci-connect.net";
+			mail.toAddresses={targetUser.email};
+			mail.subject="CI-Connect group membership request denied";
+			mail.body="This is an automatic notification that your request to join the "+
+			groupID+" group has been denied by the group administrators.";
+			if(!message.empty())
+				mail.body+="\n\nThe following reason was given: \""+message+"\"";
+			store.getEmailClient().sendEmail(mail);
+		}
+		else{
+			EmailClient::Email mail;
+			mail.fromAddress="noreply@api.ci-connect.net";
+			mail.toAddresses={targetUser.email};
+			mail.subject="CI-Connect group membership change";
+			mail.body="This is an automatic notification that your account has been removed from the "+
+			groupID+" group.";
+			if(!message.empty())
+				mail.body+="\n\nThe following reason was given: \""+message+"\"";
+			store.getEmailClient().sendEmail(mail);
+		}
 	}
 	
 	return(crow::response(200));
