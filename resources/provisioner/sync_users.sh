@@ -339,9 +339,7 @@ while [ "$PROCESSED" -lt "$N_ACTIVE" ]; do
 		release_lock
 		exit 1
 	fi
-	jq '.[] | .body | fromjson | .metadata' raw_user_data | sed -e '/"institution"/d' \
-		-e '/"access_token"/d' \
-		-e '/"phone"/d' \
+	jq '.[] | .body | fromjson | .metadata' raw_user_data | sed -e '/"access_token"/d' \
 		-e '/"join_date"/d' \
 		-e '/"last_use_time"/d' \
 		-e '/"superuser"/d' \
@@ -955,7 +953,11 @@ for USER in $USERS_TO_CREATE; do
 	fi
 	USER_ID=$(/usr/bin/env echo "$USER_DATA" | jq -r '.unix_id')
 	USER_NAME=$(/usr/bin/env echo "$USER_DATA" | jq -r '.name')
+	USER_FULLNAME=$(/usr/bin/env echo "$USER_DATA" | jq -r '.name')
+	USER_INSTITUTION=$(/usr/bin/env echo "$USER_DATA" | jq -r '.institution' | tr -d ',')
+	USER_PHONE=$(/usr/bin/env echo "$USER_DATA" | jq -r '.phone')
 	USER_EMAIL=$(/usr/bin/env echo "$USER_DATA" | jq -r '.email')
+	USER_GECOS="${USER_FULLNAME},${USER_INSTITUTION},,${USER_PHONE},${USER_EMAIL}"
 	TOTP_SECRET=$(/usr/bin/env echo "$USER_DATA" | jq -er '.totp_secret')
 	RAW_USER_GROUPS=$(/usr/bin/env echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
 	if [ "$?" -ne 0 ]; then
@@ -971,7 +973,7 @@ for USER in $USERS_TO_CREATE; do
 		fi
 		if [ "$GROUP_ROOT_GROUP" == "root" ]; then
             echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS, with default user group and no home"
-            useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -G "$USER_GROUPS" "$USER"
+            useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -G "$USER_GROUPS" "$USER"
             if [ "$(hostname -f)" == "nfs.grid.uchicago.edu" ]; then
                 echo "Creating home for user $USER with uid $USER_ID and groups $USER_GROUPS"
                 set_connect_home_quotas "$USER"
@@ -996,7 +998,7 @@ for USER in $USERS_TO_CREATE; do
             fi
 		elif [ "$(hostname -f)" == "ap20.uc.osg-htc.org" -o "$(hostname -f)" == "ap21.uc.osg-htc.org" -o "$(hostname -f)" == "ap22.uc.osg-htc.org" ]; then
 			echo "Creating user and ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
-			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
@@ -1019,7 +1021,7 @@ for USER in $USERS_TO_CREATE; do
 			fi
 		elif [ "$(hostname -f)" == "ap23.uc.osg-htc.org" ]; then
 			echo "Creating user and ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
-			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER" 
+			useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER" 
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
@@ -1045,7 +1047,7 @@ for USER in $USERS_TO_CREATE; do
 			fi
         elif [ "$(hostname -f)" == "login.uscms.org" -o "$(hostname -f)" == "login-el7.uscms.org" ]; then
 			echo "Creating user for user $USER with uid $USER_ID and groups $USER_GROUPS"
-			useradd -m -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			useradd -m -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
@@ -1071,7 +1073,7 @@ for USER in $USERS_TO_CREATE; do
 			fi
 		elif [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (XFS)"
-			useradd -c "$USER_NAME" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			useradd -c "$USER_GECOS" -u "$USER_ID" -m -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
@@ -1088,7 +1090,7 @@ for USER in $USERS_TO_CREATE; do
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$(hostname -f)" == "nfs.af.uchicago.edu" ]; then
 			echo "Creating user and ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
-			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
@@ -1107,7 +1109,7 @@ for USER in $USERS_TO_CREATE; do
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		elif [ "$(hostname -f)" == "head01.af.uchicago.edu" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
-			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
@@ -1125,7 +1127,7 @@ for USER in $USERS_TO_CREATE; do
 			set_condor_token "$USER"
 		else
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
-			useradd -c "$USER_NAME" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+			useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
 				echo "Failed to create user $USER" 1>&2
 				cat existing_users new_users | sort | uniq > existing_users.new
@@ -1189,13 +1191,17 @@ for USER in $USERS_TO_UPDATE; do
 	fi
 	EXPECTED_USER_ID=$(/usr/bin/env echo "$USER_DATA" | jq -r '.unix_id')
 	USER_NAME=$(/usr/bin/env echo "$USER_DATA" | jq -r '.name')
+	USER_FULLNAME=$(/usr/bin/env echo "$USER_DATA" | jq -r '.name')
+	USER_INSTITUTION=$(/usr/bin/env echo "$USER_DATA" | jq -r '.institution' | tr -d ',')
+	USER_PHONE=$(/usr/bin/env echo "$USER_DATA" | jq -r '.phone')
 	USER_EMAIL=$(/usr/bin/env echo "$USER_DATA" | jq -r '.email')
+	USER_GECOS="${USER_FULLNAME},${USER_INSTITUTION},,${USER_PHONE},${USER_EMAIL}"
 	TOTP_SECRET=$(/usr/bin/env echo "$USER_DATA" | jq -er '.totp_secret')
 	RAW_USER_GROUPS=$(/usr/bin/env echo "$USER_DATA" | jq '.group_memberships | map(select(.state==("active","admin")) | .name)' | sed -n 's|.*"'"$BASE_GROUP_CONTEXT"'\([^"]*\)".*|\1|p' | sed -n '/^'"$BASE_GROUP_NAME"'/p')
 	USER_GROUPS=$(/usr/bin/env echo "$RAW_USER_GROUPS" | tr '\n' ',' | sed 's|,$||')
 	echo "Updating user $USER with groups $USER_GROUPS"
 	if [ ! "$DRY_RUN" ]; then
-		usermod -G "$USER_GROUPS" "$USER"
+		usermod -c "$USER_GECOS" -G "$USER_GROUPS" "$USER"
 		set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		# OSG specific: Try to pick out the first group to which the user belongs and set it as the default 'project'
 		# However, we must not pick 'osg', or any of the login node groups, so we remove these from the list.
