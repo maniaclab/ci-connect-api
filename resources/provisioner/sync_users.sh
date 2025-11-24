@@ -562,18 +562,18 @@ set_path_collab_home_quotas(){
 
 set_collab_mfa_quotas(){
 	USER="$1"
-  	mkdir -p /var/lib/google_authenticator/"$USER"
+	mkdir -p /var/lib/google_authenticator/"$USER"
 	chown "$USER": /var/lib/google_authenticator/"$USER"
 	CURRENT_AUTH_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/google_authenticator 2>/dev/null)
 	if [ $? -ne 0 ]; then
-  		echo "Getting ZFS quota for $USER at tank/google_authenticator failed"
-  	elif [ "$CURRENT_AUTH_QUOTA" == '-' ]; then
-  		echo "User creation failed for $USER, skipping quota creation for $USER on tank/google_authenticator"
-  	elif [ "$CURRENT_AUTH_QUOTA" -eq 0 ]; then
+		echo "Getting ZFS quota for $USER at tank/google_authenticator failed"
+	elif [ "$CURRENT_AUTH_QUOTA" == '-' ]; then
+		echo "User creation failed for $USER, skipping quota creation for $USER on tank/google_authenticator"
+	elif [ "$CURRENT_AUTH_QUOTA" -eq 0 ]; then
 		zfs set userquota@"$USER"=1MB tank/google_authenticator
 	else
-  		echo "$USER already has a quota of $CURRENT_AUTH_QUOTA on tank/google_authenticator"
-     	fi
+		echo "$USER already has a quota of $CURRENT_AUTH_QUOTA on tank/google_authenticator"
+	fi
 }
 set_af_home_quotas(){
 	USER="$1"
@@ -622,18 +622,18 @@ set_path_home_quotas(){
 }
 set_path_mfa_quotas(){
 	USER="$1"
-  	mkdir -p /var/lib/google_authenticator/"$USER"
+	mkdir -p /var/lib/google_authenticator/"$USER"
 	chown "$USER": /var/lib/google_authenticator/"$USER"
 	CURRENT_AUTH_QUOTA=$(zfs get -Hp -o value userquota@"$USER" system/google_authenticator 2>/dev/null)
 	if [ $? -ne 0 ]; then
-  		echo "Getting ZFS quota for $USER at system/google_authenticator failed"
-  	elif [ "$CURRENT_AUTH_QUOTA" == '-' ]; then
-  		echo "User creation failed for $USER, skipping quota creation for $USER on system/google_authenticator"
-  	elif [ "$CURRENT_AUTH_QUOTA" -eq 0 ]; then
+		echo "Getting ZFS quota for $USER at system/google_authenticator failed"
+	elif [ "$CURRENT_AUTH_QUOTA" == '-' ]; then
+		echo "User creation failed for $USER, skipping quota creation for $USER on system/google_authenticator"
+	elif [ "$CURRENT_AUTH_QUOTA" -eq 0 ]; then
 		zfs set userquota@"$USER"=1MB system/google_authenticator
 	else
-  		echo "$USER already has a quota of $CURRENT_AUTH_QUOTA on system/google_authenticator"
-     	fi
+		echo "$USER already has a quota of $CURRENT_AUTH_QUOTA on system/google_authenticator"
+	fi
 }
 set_path_data_quotas(){
 	USER="$1"
@@ -757,7 +757,7 @@ set_cms_user_quotas() {
 set_cms_mfa_quotas(){
 	USER="$1"
 	AUTHDIR="/var/lib/google_authenticator/$USER"
-  	mkdir -p "$AUTHDIR"
+	mkdir -p "$AUTHDIR"
 	chown "$USER": "$AUTHDIR"
 	#CURRENT_AUTH_QUOTA=$(xfs_quota -x -c 'report' "$AUTHDIR" | grep "$USER")
 	#if [ $? -ne 0 ]; then
@@ -823,7 +823,7 @@ set_ssh_authorized_keys(){
 			# is atomic, it triggers on many nodes simultaneously if $HOME is on a 
 			# shared filesystem.
 			cmp "$USER_HOME_DIR"/.ssh/authorized_keys.new "$USER_HOME_DIR"/.ssh/authorized_keys > /dev/null 2>&1
-			if [ $? -ne 0 ]; then  
+			if [ $? -ne 0 ]; then
 				mv "$USER_HOME_DIR/.ssh/authorized_keys.new" "$USER_HOME_DIR/.ssh/authorized_keys"
 			else
 				rm -f "$USER_HOME_DIR/.ssh/authorized_keys.new"
@@ -972,30 +972,30 @@ for USER in $USERS_TO_CREATE; do
 			continue
 		fi
 		if [ "$GROUP_ROOT_GROUP" == "root" ]; then
-            echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS, with default user group and no home"
-            useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -G "$USER_GROUPS" "$USER"
-            if [ "$(hostname -f)" == "nfs.grid.uchicago.edu" ]; then
-                echo "Creating home for user $USER with uid $USER_ID and groups $USER_GROUPS"
-                set_connect_home_quotas "$USER"
-                if [ "${USER_GROUPS#*collab.login-nodes}" != "$USER_GROUPS" ]; then
-                    # User has collab logins in their login group, go ahead and set the collab quota.
-                    set_path_collab_home_quotas "$USER_ID"
-                fi
-                set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
-            fi
-            if [ "$?" -ne 0 ]; then
-                echo "Failed to create user $USER" 1>&2
-                cat existing_users new_users | sort | uniq > existing_users.new
-                mv existing_users.new existing_users
-                if [ "$?" -ne 0 ]; then
-                    echo "Failed to replace existing_users file" 1>&2
-                    release_lock
-                    exit 1
-                fi
-                rm new_users
-                release_lock
-                exit 1
-            fi
+			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS, with default user group and no home"
+			useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -G "$USER_GROUPS" "$USER"
+			if [ "$(hostname -f)" == "nfs.grid.uchicago.edu" ]; then
+				echo "Creating home for user $USER with uid $USER_ID and groups $USER_GROUPS"
+				set_connect_home_quotas "$USER"
+				if [ "${USER_GROUPS#*collab.login-nodes}" != "$USER_GROUPS" ]; then
+					# User has collab logins in their login group, go ahead and set the collab quota.
+					set_path_collab_home_quotas "$USER_ID"
+				fi
+				set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
+			fi
+			if [ "$?" -ne 0 ]; then
+				echo "Failed to create user $USER" 1>&2
+				cat existing_users new_users | sort | uniq > existing_users.new
+				mv existing_users.new existing_users
+				if [ "$?" -ne 0 ]; then
+					echo "Failed to replace existing_users file" 1>&2
+					release_lock
+					exit 1
+				fi
+				rm new_users
+				release_lock
+				exit 1
+			fi
 		elif [ "$(hostname -f)" == "ap20.uc.osg-htc.org" -o "$(hostname -f)" == "ap21.uc.osg-htc.org" -o "$(hostname -f)" == "ap22.uc.osg-htc.org" ]; then
 			echo "Creating user and ZFS home for user $USER with uid $USER_ID and groups $USER_GROUPS"
 			useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
@@ -1014,9 +1014,9 @@ for USER in $USERS_TO_CREATE; do
 			fi
 			set_path_home_quotas "$USER"
 			set_path_data_quotas "$USER"
-   			set_path_mfa_quotas "$USER"
+			set_path_mfa_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
-   			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
+			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
 				set_google_authenticator_secret "$USER" "/var/lib/google_authenticator/${USER}" "$TOTP_SECRET" 
 			fi
 		elif [ "$(hostname -f)" == "ap23.uc.osg-htc.org" ]; then
@@ -1039,13 +1039,13 @@ for USER in $USERS_TO_CREATE; do
 			# directory in ceph
 			set_collab_scratch_quotas "$USER"
 			set_collab_data_quotas "$USER"
-   			# Adding mfa directory
-   			set_collab_mfa_quotas "$USER"
+			# Adding mfa directory
+			set_collab_mfa_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
-      			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
+			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
 				set_google_authenticator_secret "$USER" "/var/lib/google_authenticator/${USER}" "$TOTP_SECRET" 
 			fi
-        elif [ "$(hostname -f)" == "login.uscms.org" -o "$(hostname -f)" == "login-el7.uscms.org" ]; then
+		elif [ "$(hostname -f)" == "login.uscms.org" -o "$(hostname -f)" == "login-el7.uscms.org" ]; then
 			echo "Creating user for user $USER with uid $USER_ID and groups $USER_GROUPS"
 			useradd -m -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
@@ -1066,9 +1066,9 @@ for USER in $USERS_TO_CREATE; do
 			set_cms_scratch_quotas "$USER"
 			set_cms_user_quotas "$USER"
 			set_cms_mfa_quotas "$USER"
-   			# Adding mfa directory
+			# Adding mfa directory
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
-      			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
+			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
 				set_google_authenticator_secret "$USER" "/var/lib/google_authenticator/${USER}" "$TOTP_SECRET" 
 			fi
 		elif [ "$GROUP_ROOT_GROUP" == "root.osg" ]; then
