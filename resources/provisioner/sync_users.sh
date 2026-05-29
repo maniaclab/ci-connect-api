@@ -651,6 +651,50 @@ set_path_data_quotas(){
 	fi
 }
 
+set_pile_home_quotas(){
+        USER="$1"
+        CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" system/home 2>/dev/null)
+        if [ $? -ne 0 ]; then
+                echo "ZFS dataset creation failed for $USER"
+        elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
+                echo "User creation failed for $USER, skipping quota creation for $USER on system/home"
+        elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+                zfs set userquota@"$USER"=50GB system/home
+        else
+                echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on system/home"
+        fi
+}
+set_pile_mfa_quotas(){
+        USER="$1"
+        mkdir -p /var/lib/google_authenticator/"$USER"
+        chown "$USER": /var/lib/google_authenticator/"$USER"
+        CURRENT_AUTH_QUOTA=$(zfs get -Hp -o value userquota@"$USER" system/google_authenticator 2>/dev/null)
+        if [ $? -ne 0 ]; then
+                echo "Getting ZFS quota for $USER at system/google_authenticator failed"
+        elif [ "$CURRENT_AUTH_QUOTA" == '-' ]; then
+                echo "User creation failed for $USER, skipping quota creation for $USER on system/google_authenticator"
+        elif [ "$CURRENT_AUTH_QUOTA" -eq 0 ]; then
+                zfs set userquota@"$USER"=1MB system/google_authenticator
+        else
+                echo "$USER already has a quota of $CURRENT_AUTH_QUOTA on system/google_authenticator"
+        fi
+}
+set_pile_scratch_quotas(){
+        USER="$1"
+        mkdir -p /scratch/"$USER"
+        chown "$USER": /scratch/"$USER"
+        CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/scratch 2>/dev/null)
+        if [ $? -ne 0 ]; then
+                echo "ZFS dataset creation failed for $USER"
+        elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
+                echo "User creation failed for $USER, skipping quota creation for $USER on tank/scratch"
+        elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+                zfs set userquota@"$USER"=100GB tank/scratch
+        else
+                echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/userdata"
+        fi
+}
+
 set_snowmass_quotas(){
 	USER="$1"
 	# ZFS
@@ -1125,6 +1169,32 @@ for USER in $USERS_TO_CREATE; do
 			fi
 			echo "Creating Condor token for $USER"
 			set_condor_token "$USER"
+                elif [ "$(hostname -f)" == "login01.pile.uchicago.edu" -o "$(hostname -f)" == "login02.pile.uchicago.edu" -o "$(hostname -f)" == "login03.pile.uchicago.edu" -o "$(hostname -f)" == "login04.pile.uchicago.edu" -o "$(hostname -f)" == "login05.pile.uchicago.edu" -o "$(hostname -f)" == "login06.pile.uchicago.edu" ]; then
+                        echo "Creating user and home for user $USER with uid $USER_ID and groups $USER_GROUPS"
+                        useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
+                        if [ "$?" -ne 0 ]; then
+                                echo "Failed to create user $USER" 1>&2
+                                cat existing_users new_users | sort | uniq > existing_users.new
+                                mv existing_users.new existing_users
+                                if [ "$?" -ne 0 ]; then
+                                        echo "Failed to replace existing_users file" 1>&2
+                                        release_lock
+                                        exit 1
+                                fi
+                                rm new_users
+                                release_lock
+                                exit 1
+                        fi
+			# ZFS homes
+			if [ "$(hostname -f)" == "login01.pile.uchicago.edu" -o "$(hostname -f)" == "login02.pile.uchicago.edu" ]; then
+                        	set_pile_home_quotas "$USER"
+                        	set_pile_scratch_quotas "$USER"
+			fi
+                        set_pile_mfa_quotas "$USER"
+                        set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
+                        if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
+                                set_google_authenticator_secret "$USER" "/var/lib/google_authenticator/${USER}" "$TOTP_SECRET"
+                        fi
 		else
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
 			useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
