@@ -659,7 +659,7 @@ set_pile_home_quotas(){
         elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
                 echo "User creation failed for $USER, skipping quota creation for $USER on system/home"
         elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-                zfs set userquota@"$USER"=50GB system/home
+                zfs set userquota@"$USER"=100GB system/home
         else
                 echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on system/home"
         fi
@@ -689,9 +689,9 @@ set_pile_scratch_quotas(){
         elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
                 echo "User creation failed for $USER, skipping quota creation for $USER on tank/scratch"
         elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
-                zfs set userquota@"$USER"=100GB tank/scratch
+                zfs set userquota@"$USER"=1TB tank/scratch
         else
-                echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/userdata"
+                echo "$USER already has a quota of $CURRENT_ZFS_QUOTA on tank/scratch"
         fi
 }
 
