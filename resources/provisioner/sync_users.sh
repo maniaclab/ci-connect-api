@@ -695,6 +695,35 @@ set_pile_scratch_quotas(){
 	fi
 }
 
+set_pile_data_quotas(){
+	USER="$1"
+	# ZFS /mnt/local
+	mkdir -p /mnt/local/"$USER"
+	chown "$USER": /mnt/local/"$USER"
+	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/globus 2>/dev/null)
+	if [ $? -ne 0 ]; then
+		echo "ZFS dataset creation failed for $USER"
+	elif [ "$CURRENT_ZFS_QUOTA" == '-' ]; then
+		echo "User creation failed for $USER, skipping quota creation for $USER on tank/globus"
+	elif [ "$CURRENT_ZFS_QUOTA" -eq 0 ]; then
+		zfs set userquota@"$USER"=1TB tank/globus
+	fi
+	# Ceph /mnt/ceph
+	mkdir -p /mnt/ceph/"$USER"
+	chown "$USER": /mnt/ceph/"$USER"
+	which getfattr >/dev/null 2>&1 # requires 'attr' package, not installed by default on EL
+	if [ "$?" -ne 0 ]; then
+		echo "getfattr(1) is not installed or not in PATH. Cannot set Ceph quota. Try installing 'attr'?"
+	else
+		CURRENT_CEPH_QUOTA=$(getfattr --only-values -n ceph.quota.max_bytes /mnt/ceph/"$USER" 2>/dev/null)
+		if [ $? -ne 0 ]; then
+			setfattr -n ceph.quota.max_bytes -v 1000000000000 /mnt/ceph/"$USER"
+		else
+			echo "$USER already has a quota of $CURRENT_CEPH_QUOTA"
+		fi
+	fi
+}
+
 set_snowmass_quotas(){
 	USER="$1"
 	# ZFS
@@ -1195,6 +1224,23 @@ for USER in $USERS_TO_CREATE; do
 			if [ "$TOTP_SECRET" != "null" ] && [ "$TOTP_SECRET" != "No TOTP secret" ] && [ "$TOTP_SECRET" != "" ]; then
 				set_google_authenticator_secret "$USER" "/var/lib/google_authenticator/${USER}" "$TOTP_SECRET"
 			fi
+		elif [ "$(hostname -f)" == "globus.pile.uchicago.edu" ]; then
+			echo "Creating user and data directories for user $USER with uid $USER_ID and groups $USER_GROUPS"
+			useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" -s /sbin/nologin "$USER"
+			if [ "$?" -ne 0 ]; then
+				echo "Failed to create user $USER" 1>&2
+				cat existing_users new_users | sort | uniq > existing_users.new
+				mv existing_users.new existing_users
+				if [ "$?" -ne 0 ]; then
+					echo "Failed to replace existing_users file" 1>&2
+					release_lock
+					exit 1
+				fi
+				rm new_users
+				release_lock
+				exit 1
+			fi
+			set_pile_data_quotas "$USER"
 		else
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
 			useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
