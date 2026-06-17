@@ -697,9 +697,9 @@ set_pile_scratch_quotas(){
 
 set_pile_data_quotas(){
 	USER="$1"
-	# ZFS /mnt/local
-	mkdir -p /mnt/local/"$USER"
-	chown "$USER": /mnt/local/"$USER"
+	# ZFS /tank/globus
+	mkdir -p /tank/globus/"$USER"
+	chown "$USER": /tank/globus/"$USER"
 	CURRENT_ZFS_QUOTA=$(zfs get -Hp -o value userquota@"$USER" tank/globus 2>/dev/null)
 	if [ $? -ne 0 ]; then
 		echo "ZFS dataset creation failed for $USER"
