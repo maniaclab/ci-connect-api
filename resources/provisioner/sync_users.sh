@@ -1318,7 +1318,7 @@ for USER in $USERS_TO_UPDATE; do
 	echo "Updating user $USER with groups $USER_GROUPS"
 	if [ ! "$DRY_RUN" ]; then
 		usermod -c "$USER_GECOS" -G "$USER_GROUPS" "$USER"
-		if [ "$(hostname -f)" == "amundsen.grid.uchicago.edu" -o "$(hostname -f)" == "bastion.grid.uchicago.edu" -o "$(hostname -f)" == "ap23.uc.osg-htc.org" -o "$(hostname -f)" == "nfs.af.uchicago.edu" ]; then
+		if [ "$(hostname -f)" == "amundsen.grid.uchicago.edu" -o "$(hostname -f)" == "bastion.grid.uchicago.edu" -o "$(hostname -f)" == "ap23.uc.osg-htc.org" -o "$(hostname -f)" == "nfs.af.uchicago.edu" -o "$(hostname -f)" == "login01.pile.uchicago.edu" -o "$(hostname -f)" == "login02.pile.uchicago.edu" ]; then
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
 		fi
 		# OSG specific: Try to pick out the first group to which the user belongs and set it as the default 'project'
