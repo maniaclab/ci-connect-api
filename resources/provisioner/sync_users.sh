@@ -1180,7 +1180,7 @@ for USER in $USERS_TO_CREATE; do
 			set_af_home_quotas "$USER"
 			set_af_data_quotas "$USER"
 			set_ssh_authorized_keys "$USER" "${HOME_DIR_ROOT}/${USER}" "$(/usr/bin/env echo "$USER_DATA" | jq -r '.public_key')"
-		elif [ "$(hostname -f)" == "head01.af.uchicago.edu" ]; then
+		elif [ "$(hostname -f)" == "head04.af.uchicago.edu" ]; then
 			echo "Creating user $USER with uid $USER_ID and groups $USER_GROUPS (No Home)"
 			useradd -c "$USER_GECOS" -u "$USER_ID" -b "${HOME_DIR_ROOT}" -N -g "$BASE_GROUP_NAME" -G "$USER_GROUPS" "$USER"
 			if [ "$?" -ne 0 ]; then
