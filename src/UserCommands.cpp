@@ -18,6 +18,31 @@ std::string adminInAnyEnclosingGroup(PersistentStore& store, const std::string& 
 	return "";
 }
 
+///\return whether the user is an admin of at least one group
+static bool isAdminOfAnyGroup(PersistentStore& store, const std::string& userID){
+	for(const GroupMembership& membership : store.getUserGroupMemberships(userID)){
+		if(membership.state==GroupMembership::Admin)
+			return true;
+	}
+	return false;
+}
+
+///\return the name of a group the requester administers, directly or through an enclosing
+///        group, in which the target user has a membership (pending, active, admin or disabled),
+///        or the empty string if there is none
+static std::string adminOfAnyGroupOfUser(PersistentStore& store, const std::string& requesterID, const std::string& targetID){
+	for(const GroupMembership& membership : store.getUserGroupMemberships(targetID)){
+		if(membership.state==GroupMembership::NonMember)
+			continue;
+		if(store.userStatusInGroup(requesterID,membership.groupName).state==GroupMembership::Admin)
+			return membership.groupName;
+		std::string adminGroup=adminInAnyEnclosingGroup(store,requesterID,membership.groupName);
+		if(!adminGroup.empty())
+			return adminGroup;
+	}
+	return "";
+}
+
 crow::response listUsers(PersistentStore& store, const crow::request& req){
 	const User user=authenticateUser(store, req.url_params.get("token"));
 	log_info(user << " requested to list users from " << req.remote_endpoint);
@@ -1167,7 +1192,10 @@ crow::response findUser(PersistentStore& store, const crow::request& req){
 	//this is the requesting user, not the requested user
 	const User user=authenticateUser(store, req.url_params.get("token"));
 	log_info(user << " requested user information for a globus ID from " << req.remote_endpoint);
-	if(!user || !user.superuser)
+	//Superusers may look up any user. Group admins may look up users who have a membership in
+	//a group they administer (directly or through an enclosing group), and get only the user
+	//name. Everyone else is refused, as before.
+	if(!user || (!user.superuser && !isAdminOfAnyGroup(store,user.unixName)))
 		return crow::response(403,generateError("Not authorized"));
 	
 	if(!req.url_params.get("globus_id"))
@@ -1178,6 +1206,13 @@ crow::response findUser(PersistentStore& store, const crow::request& req){
 	
 	if(!targetUser)
 		return crow::response(404,generateError("User not found"));
+	//to a group admin, a user outside their groups looks the same as one who does not exist
+	if(!user.superuser){
+		std::string adminGroup=adminOfAnyGroupOfUser(store,user.unixName,targetUser.unixName);
+		if(adminGroup.empty())
+			return crow::response(404,generateError("User not found"));
+		log_info(user << " found " << targetUser << " by globus ID as an admin of " << adminGroup);
+	}
 
 	rapidjson::Document result(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = result.GetAllocator();
@@ -1186,7 +1221,9 @@ crow::response findUser(PersistentStore& store, const crow::request& req){
 	result.AddMember("kind", "User", alloc);
 	rapidjson::Value metadata(rapidjson::kObjectType);
 	metadata.AddMember("unix_name", targetUser.unixName, alloc);
-	metadata.AddMember("access_token", targetUser.token, alloc);
+	//only superusers may obtain another user's access token
+	if(user.superuser)
+		metadata.AddMember("access_token", targetUser.token, alloc);
 	result.AddMember("metadata", metadata, alloc);
 
 	return crow::response(to_string(result));

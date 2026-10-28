@@ -393,8 +393,11 @@ version: v1alpha1
                   type: !include ErrorResultSchema.json
 /find_user:
   get:
-    description: Look up a user account by globus ID
-    # only superusers are permitted to use this request
+    description: |
+      Look up a user account by globus ID. Superusers may look up any user and also receive the
+      user's access token. Admins of a group (directly or through an enclosing group) may look up
+      users with a membership in that group and receive only the user name; for them, a user
+      outside their groups is reported as not found. All other users are refused.
     queryParameters:
       token:
         displayName: Access Token
@@ -408,7 +411,7 @@ version: v1alpha1
         required: true
     responses:
       200:
-        description: Credentials for the relevent user
+        description: The user's name, and for superusers also the user's access token
         body:
           application/json: !include FindUserResultSchema.json
       403:
