@@ -15,14 +15,15 @@
     "metadata": {
       "type": "object",
       "properties": {
-        "id": {
-          "type": string
+        "unix_name": {
+          "type": "string"
         },
         "access_token": {
+          "description": "Only returned to superusers",
           "type": "string"
         }
       },
-      "required": ["id","access_token"]
+      "required": ["unix_name"]
     }
   },
   "required": ["apiVersion","kind","metadata"]
